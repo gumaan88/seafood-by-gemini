@@ -10,10 +10,13 @@ export interface UserProfile {
   createdAt: number;
 }
 
+export type ProviderCategory = 'مطعم' | 'مقهى' | 'ملابس' | 'إلكترونيات' | 'خدمات' | 'أخرى';
+
 export interface ProviderProfile {
   providerId: string; // Same as uid
   name: string;
   description: string;
+  category: ProviderCategory; // New field
   followersCount: number;
   imageUrl?: string;
 }
@@ -24,7 +27,7 @@ export interface CatalogItem {
   name: string;
   description: string;
   priceDefault: number;
-  category: string;
+  category: string; // Free text defined by provider (e.g. "Main Course", "Shoes")
   imageUrl?: string;
   isActive: boolean;
 }
