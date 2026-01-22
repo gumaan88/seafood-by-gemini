@@ -1,3 +1,4 @@
+
 export type UserRole = 'customer' | 'provider' | 'admin';
 
 export interface UserProfile {
@@ -52,7 +53,8 @@ export interface Reservation {
   customerName: string; // Denormalized
   quantity: number;
   totalPrice: number;
-  paymentProofUrl?: string;
+  paymentProofUrl?: string; // Legacy support
+  paymentReference?: string; // New text based payment
   status: ReservationStatus;
   createdAt: number;
 }

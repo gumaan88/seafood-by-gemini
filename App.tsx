@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 // Mock Router to replace missing react-router-dom
 const RouterContext = createContext({ path: window.location.hash.substring(1) || '/' });
@@ -73,7 +74,10 @@ import {
   CheckBadgeIcon,
   Square2StackIcon,
   TableCellsIcon,
-  UserIcon
+  UserIcon,
+  TagIcon,
+  IdentificationIcon,
+  BanknotesIcon
 } from '@heroicons/react/24/outline';
 
 // --- Toast System ---
@@ -226,13 +230,7 @@ const Badge: React.FC<{ status: string }> = ({ status }) => {
     );
 };
 
-// ... [Navbar, Auth Pages, and other unchanged components] ...
-// I will keep Login, Register, CustomerHome, MyReservations, ProviderDashboard, ProviderCatalog, ProviderOffers components AS IS from previous version
-// Only replacing ProviderReservations completely.
-
-// --- REUSING PREVIOUS COMPONENTS FOR CONTEXT ---
-// (Note: In the XML output I must include the full file content, so I will reconstruct the full file)
-
+// ... [Navbar component unchanged] ...
 const Navbar = () => {
   const { userProfile, logout } = useContext(AuthContext);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -329,16 +327,27 @@ const Navbar = () => {
   );
 };
 
+// --- UPDATED AUTH COMPONENTS ---
+
 const Login = () => {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { showToast } = useContext(ToastContext);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      // Logic to support both email and phone (assuming phone is stored as email@domain)
+      let emailToUse = identifier;
+      const isEmail = identifier.includes('@');
+      if (!isEmail) {
+        // If it looks like a phone number (digits), treat as phone alias
+        emailToUse = `${identifier}@seacatch.local`;
+      }
+
+      await signInWithEmailAndPassword(auth, emailToUse, password);
       showToast('تم تسجيل الدخول بنجاح', 'success');
       window.location.hash = '/';
     } catch (err: any) {
@@ -349,6 +358,7 @@ const Login = () => {
     }
     setLoading(false);
   };
+
   return (
     <div className="min-h-[calc(100vh-64px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-sea-50">
       <Card className="max-w-md w-full p-8 space-y-8 animate-slide-up border-t-4 border-t-sea-500">
@@ -357,12 +367,14 @@ const Login = () => {
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
           <div className="rounded-md shadow-sm -space-y-px">
-            <input type="email" required className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-sea-500 focus:border-sea-500 focus:z-10 sm:text-sm" placeholder="البريد الإلكتروني" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input type="text" required className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-sea-500 focus:border-sea-500 focus:z-10 sm:text-sm" placeholder="البريد الإلكتروني أو رقم الجوال" value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
             <input type="password" required className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-sea-500 focus:border-sea-500 focus:z-10 sm:text-sm" placeholder="كلمة المرور" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           <Button type="submit" isLoading={loading} className="w-full py-3">دخول</Button>
           <div className="text-sm text-center">
-            <Link to="/register" className="font-medium text-sea-600 hover:text-sea-500 transition-colors">ليس لديك حساب؟ <span className="underline">سجل الآن</span></Link>
+            <Link to="/register" className="font-medium text-sea-600 hover:text-sea-500 transition-colors">
+              ليس لديك حساب؟ <span className="underline">سجل الآن</span>
+            </Link>
           </div>
         </form>
       </Card>
@@ -371,25 +383,47 @@ const Login = () => {
 };
 
 const Register = () => {
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', phone: '', role: 'customer' as UserRole });
+  const [formData, setFormData] = useState({ name: '', contact: '', password: '', role: 'customer' as UserRole, providerCode: '' });
   const [loading, setLoading] = useState(false);
   const { showToast } = useContext(ToastContext);
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check Provider PIN
+    if (formData.role === 'provider' && formData.providerCode !== '356751') {
+        showToast("رمز التحقق لمقدم الخدمة غير صحيح", 'error');
+        return;
+    }
+
     setLoading(true);
     let userToDelete: User | null = null;
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+      // Determine if contact is email or phone
+      let emailToRegister = formData.contact;
+      let phoneToStore = '';
+      const isEmail = formData.contact.includes('@');
+      
+      if (!isEmail) {
+          // It's a phone number
+          phoneToStore = formData.contact;
+          emailToRegister = `${formData.contact}@seacatch.local`;
+      }
+
+      const userCredential = await createUserWithEmailAndPassword(auth, emailToRegister, formData.password);
       userToDelete = userCredential.user;
+
       const newUser: UserProfile = {
         uid: userCredential.user.uid,
         name: formData.name,
-        email: formData.email,
+        email: emailToRegister,
         role: formData.role,
-        phone: formData.phone,
+        phone: phoneToStore,
         createdAt: Date.now(),
       };
+
       await setDoc(doc(db, 'users', userCredential.user.uid), newUser);
+
       if (formData.role === 'provider') {
         const newProvider: ProviderProfile = {
             providerId: userCredential.user.uid,
@@ -399,17 +433,20 @@ const Register = () => {
         }
         await setDoc(doc(db, 'providers', userCredential.user.uid), newProvider);
       }
+      
       showToast('تم إنشاء الحساب بنجاح', 'success');
       window.location.hash = '/';
+
     } catch (err: any) {
       console.error(err);
       let msg = "فشل التسجيل";
-      if (err.code === 'auth/email-already-in-use') msg = "البريد الإلكتروني مستخدم مسبقاً";
+      if (err.code === 'auth/email-already-in-use') msg = "الحساب مسجل مسبقاً";
       showToast(msg, 'error');
       if (userToDelete) try { await deleteUser(userToDelete); } catch {}
     }
     setLoading(false);
   };
+
   return (
     <div className="min-h-[calc(100vh-64px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-sea-50">
       <Card className="max-w-md w-full p-8 space-y-8 animate-slide-up border-t-4 border-t-sea-500">
@@ -419,17 +456,40 @@ const Register = () => {
         <form className="mt-8 space-y-4" onSubmit={handleRegister}>
           <div className="space-y-3">
             <input type="text" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sea-500 focus:outline-none" placeholder="الاسم الكامل" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
-            <input type="email" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sea-500 focus:outline-none" placeholder="البريد الإلكتروني" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
+            <input type="text" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sea-500 focus:outline-none" placeholder="البريد الإلكتروني أو رقم الجوال" value={formData.contact} onChange={(e) => setFormData({...formData, contact: e.target.value})} />
             <input type="password" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sea-500 focus:outline-none" placeholder="كلمة المرور (6 أحرف على الأقل)" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
-            <input type="tel" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sea-500 focus:outline-none" placeholder="رقم الهاتف" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} />
           </div>
+
           <div className="grid grid-cols-2 gap-4 mt-4">
-            <div onClick={() => setFormData({...formData, role: 'customer'})} className={`cursor-pointer p-4 rounded-lg border-2 text-center transition-all ${formData.role === 'customer' ? 'border-sea-600 bg-sea-50 text-sea-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-sea-300'}`}><div>🍽️</div><div className="text-sm mt-1">عميل</div></div>
-            <div onClick={() => setFormData({...formData, role: 'provider'})} className={`cursor-pointer p-4 rounded-lg border-2 text-center transition-all ${formData.role === 'provider' ? 'border-sea-600 bg-sea-50 text-sea-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-sea-300'}`}><div>👨‍🍳</div><div className="text-sm mt-1">مقدم خدمة</div></div>
+            <div 
+                onClick={() => setFormData({...formData, role: 'customer'})}
+                className={`cursor-pointer p-4 rounded-lg border-2 text-center transition-all ${formData.role === 'customer' ? 'border-sea-600 bg-sea-50 text-sea-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-sea-300'}`}
+            >
+                <div>🍽️</div>
+                <div className="text-sm mt-1">عميل</div>
+            </div>
+            <div 
+                onClick={() => setFormData({...formData, role: 'provider'})}
+                className={`cursor-pointer p-4 rounded-lg border-2 text-center transition-all ${formData.role === 'provider' ? 'border-sea-600 bg-sea-50 text-sea-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-sea-300'}`}
+            >
+                <div>👨‍🍳</div>
+                <div className="text-sm mt-1">مقدم خدمة</div>
+            </div>
           </div>
+
+          {/* Provider PIN Field */}
+          {formData.role === 'provider' && (
+              <div className="animate-fade-in mt-4">
+                  <label className="text-sm text-gray-600 block mb-1">رمز التحقق (للشيف فقط)</label>
+                  <input type="password" required className="block w-full px-3 py-3 border border-red-200 bg-red-50 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none text-center tracking-widest" placeholder="أدخل الرمز السري" value={formData.providerCode} onChange={(e) => setFormData({...formData, providerCode: e.target.value})} />
+              </div>
+          )}
+
           <Button type="submit" isLoading={loading} className="w-full py-3 mt-6">تسجيل</Button>
           <div className="text-sm text-center">
-            <Link to="/login" className="font-medium text-sea-600 hover:text-sea-500">لديك حساب؟ سجل دخول</Link>
+            <Link to="/login" className="font-medium text-sea-600 hover:text-sea-500">
+              لديك حساب؟ سجل دخول
+            </Link>
           </div>
         </form>
       </Card>
@@ -437,9 +497,12 @@ const Register = () => {
   );
 };
 
+// --- REST OF APP COMPONENTS ---
+
 const ProviderDashboard = () => {
   const { userProfile } = useContext(AuthContext);
   const [stats, setStats] = useState({ items: 0, offers: 0, reservations: 0, revenue: 0, followers: 0 });
+
   useEffect(() => {
     const fetchStats = async () => {
         if (!userProfile) return;
@@ -447,24 +510,34 @@ const ProviderDashboard = () => {
             const itemsSnap = await getDocs(query(collection(db, 'catalogItems'), where('providerId', '==', userProfile.uid)));
             const offersSnap = await getDocs(query(collection(db, 'offerings'), where('providerId', '==', userProfile.uid), where('isActive', '==', true)));
             const resSnap = await getDocs(query(collection(db, 'reservations'), where('providerId', '==', userProfile.uid)));
+            
             let rev = 0;
             resSnap.forEach(doc => {
                 const data = doc.data() as Reservation;
                 if(data.status === 'completed') rev += data.totalPrice;
             });
+
             const providerDoc = await getDoc(doc(db, 'providers', userProfile.uid));
             const followers = providerDoc.exists() ? (providerDoc.data() as ProviderProfile).followersCount : 0;
+
             setStats({ items: itemsSnap.size, offers: offersSnap.size, reservations: resSnap.size, revenue: rev, followers });
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+        }
     };
     fetchStats();
   }, [userProfile]);
+
   const StatCard = ({ title, value, color, icon }: any) => (
       <Card className="p-6 flex items-center justify-between border-l-4" style={{ borderLeftColor: color }}>
-        <div><p className="text-gray-500 text-sm font-medium mb-1">{title}</p><h3 className="text-3xl font-bold text-gray-800">{value}</h3></div>
+        <div>
+            <p className="text-gray-500 text-sm font-medium mb-1">{title}</p>
+            <h3 className="text-3xl font-bold text-gray-800">{value}</h3>
+        </div>
         <div className="p-3 rounded-full bg-gray-50 text-gray-600">{icon}</div>
       </Card>
   );
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <h1 className="text-3xl font-bold text-gray-800">لوحة التحكم</h1>
@@ -492,14 +565,13 @@ const ProviderReservations = () => {
     const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState('');
-    const [groupBy, setGroupBy] = useState<'none' | 'customer'>('none');
+    const [groupBy, setGroupBy] = useState<'none' | 'customer' | 'item'>('none');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
     const fetchReservations = async () => {
         if(!userProfile) return;
         setLoading(true);
         try {
-            // Fetch ALL (Client-side index constraint safe)
             const q = query(collection(db, 'reservations'), where('providerId', '==', userProfile.uid));
             const snap = await getDocs(q);
             const data = snap.docs.map(d => ({id: d.id, ...d.data()} as Reservation));
@@ -518,7 +590,7 @@ const ProviderReservations = () => {
     const filteredReservations = useMemo(() => {
         let result = reservations;
 
-        // 1. Date Filter (Check createdAt timestamp between From and To)
+        // 1. Date Filter
         const fromTs = new Date(dateFrom).setHours(0,0,0,0);
         const toTs = new Date(dateTo).setHours(23,59,59,999);
         result = result.filter(r => r.createdAt >= fromTs && r.createdAt <= toTs);
@@ -547,11 +619,19 @@ const ProviderReservations = () => {
         const pending = filteredReservations.filter(r => r.status === 'pending').length;
         const confirmed = filteredReservations.filter(r => r.status === 'confirmed').length;
         const revenue = filteredReservations.reduce((acc, curr) => (curr.status === 'completed' || curr.status === 'confirmed') ? acc + curr.totalPrice : acc, 0);
-        return { total, pending, confirmed, revenue };
+        
+        // Item breakdown
+        const itemCounts: Record<string, number> = {};
+        filteredReservations.forEach(r => {
+            itemCounts[r.offeringName] = (itemCounts[r.offeringName] || 0) + r.quantity;
+        });
+
+        return { total, pending, confirmed, revenue, itemCounts };
     }, [filteredReservations]);
 
     // Handlers
     const toggleSelect = (id: string) => {
+        if(statusFilter === 'all') return; // Restriction
         const newSet = new Set(selectedIds);
         if (newSet.has(id)) newSet.delete(id);
         else newSet.add(id);
@@ -559,6 +639,7 @@ const ProviderReservations = () => {
     };
 
     const toggleSelectAll = () => {
+        if(statusFilter === 'all') return; // Restriction
         if (selectedIds.size === filteredReservations.length) {
             setSelectedIds(new Set());
         } else {
@@ -566,8 +647,15 @@ const ProviderReservations = () => {
         }
     };
 
-    const handleBulkAction = async (newStatus: ReservationStatus) => {
-        if(!confirm(`هل أنت متأكد من تغيير حالة ${selectedIds.size} طلبات؟`)) return;
+    const handleBulkAction = async () => {
+        if(!confirm(`هل أنت متأكد من تحديث حالة ${selectedIds.size} طلبات؟`)) return;
+        
+        // Determine Status based on current filter (Smart Workflow)
+        let newStatus: ReservationStatus = 'confirmed';
+        if (statusFilter === 'pending') newStatus = 'confirmed';
+        else if (statusFilter === 'confirmed') newStatus = 'completed';
+        else return;
+
         const batch = writeBatch(db);
         selectedIds.forEach(id => {
             const ref = doc(db, 'reservations', id);
@@ -596,12 +684,24 @@ const ProviderReservations = () => {
         if (groupBy === 'none') return null;
         
         const groups: Record<string, { name: string, items: Reservation[], total: number }> = {};
+        
         filteredReservations.forEach(r => {
-            if (!groups[r.customerId]) {
-                groups[r.customerId] = { name: r.customerName, items: [], total: 0 };
+            let key = '';
+            let name = '';
+            
+            if (groupBy === 'customer') {
+                key = r.customerId;
+                name = r.customerName;
+            } else if (groupBy === 'item') {
+                key = r.offeringName; // simplistic key
+                name = r.offeringName;
             }
-            groups[r.customerId].items.push(r);
-            if (r.status !== 'cancelled') groups[r.customerId].total += r.totalPrice;
+
+            if (!groups[key]) {
+                groups[key] = { name: name, items: [], total: 0 };
+            }
+            groups[key].items.push(r);
+            if (r.status !== 'cancelled') groups[key].total += r.totalPrice;
         });
         return Object.values(groups);
     }, [filteredReservations, groupBy]);
@@ -650,6 +750,18 @@ const ProviderReservations = () => {
                 </div>
             </div>
 
+            {/* Item Stats Chips */}
+            {Object.keys(stats.itemCounts).length > 0 && (
+                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                    {Object.entries(stats.itemCounts).map(([name, count]) => (
+                        <div key={name} className="flex-shrink-0 bg-white px-3 py-1 rounded-full border border-gray-200 shadow-sm flex items-center gap-2 text-sm">
+                            <span className="text-gray-600 font-medium">{name}</span>
+                            <span className="bg-sea-100 text-sea-700 px-2 rounded-full font-bold text-xs">{count}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
             {/* Controls Toolbar */}
             <Card className="p-4 flex flex-col lg:flex-row gap-4 justify-between items-center sticky top-20 z-40 shadow-md">
                 <div className="flex flex-1 w-full gap-4 flex-col sm:flex-row">
@@ -670,7 +782,7 @@ const ProviderReservations = () => {
                         {['all', 'pending', 'confirmed', 'completed', 'cancelled'].map(st => (
                             <button
                                 key={st}
-                                onClick={() => setStatusFilter(st)}
+                                onClick={() => { setStatusFilter(st); setSelectedIds(new Set()); }}
                                 className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${statusFilter === st ? 'bg-white shadow text-sea-700' : 'text-gray-500 hover:text-gray-700'}`}
                             >
                                 {st === 'all' && 'الكل'}
@@ -700,18 +812,29 @@ const ProviderReservations = () => {
                     >
                         <UserIcon className="w-6 h-6" />
                     </button>
+                    <button 
+                        onClick={() => setGroupBy('item')}
+                        className={`p-2 rounded-lg ${groupBy === 'item' ? 'bg-sea-100 text-sea-700' : 'text-gray-400 hover:bg-gray-50'}`}
+                        title="تجميع بالصنف"
+                    >
+                        <TagIcon className="w-6 h-6" />
+                    </button>
                 </div>
             </Card>
 
             {/* Bulk Actions Floating Bar */}
-            {selectedIds.size > 0 && (
+            {selectedIds.size > 0 && statusFilter !== 'all' && (
                 <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-2xl z-50 flex items-center gap-4 animate-slide-up">
                     <span className="font-bold text-sm bg-gray-700 px-2 py-0.5 rounded-md">{selectedIds.size}</span>
                     <span className="text-sm font-medium">عنصر محدد</span>
                     <div className="h-4 w-px bg-gray-600"></div>
-                    <button onClick={() => handleBulkAction('confirmed')} className="hover:text-green-400 font-bold text-sm flex items-center gap-1"><CheckCircleIcon className="w-5 h-5"/> تأكيد</button>
-                    <button onClick={() => handleBulkAction('completed')} className="hover:text-blue-400 font-bold text-sm flex items-center gap-1"><CheckBadgeIcon className="w-5 h-5"/> إكمال</button>
-                    <button onClick={() => handleBulkAction('cancelled')} className="hover:text-red-400 font-bold text-sm flex items-center gap-1"><XCircleIcon className="w-5 h-5"/> إلغاء</button>
+                    
+                    {/* Smart Action Button */}
+                    <button onClick={handleBulkAction} className="hover:text-green-400 font-bold text-sm flex items-center gap-1">
+                        {statusFilter === 'pending' && <><CheckCircleIcon className="w-5 h-5"/> تأكيد الكل</>}
+                        {statusFilter === 'confirmed' && <><CheckBadgeIcon className="w-5 h-5"/> إكمال الكل</>}
+                    </button>
+                    
                     <div className="h-4 w-px bg-gray-600"></div>
                     <button onClick={() => setSelectedIds(new Set())} className="text-gray-400 hover:text-white"><XMarkIcon className="w-5 h-5"/></button>
                 </div>
@@ -729,13 +852,17 @@ const ProviderReservations = () => {
                 {/* VIEW MODE: LIST */}
                 {groupBy === 'none' && (
                     <div className="space-y-4">
-                        <div className="flex items-center gap-2 px-2 text-sm text-gray-500 font-medium">
-                            <input type="checkbox" onChange={toggleSelectAll} checked={selectedIds.size === filteredReservations.length && filteredReservations.length > 0} className="w-4 h-4 rounded border-gray-300 text-sea-600 focus:ring-sea-500" />
-                            <span>تحديد الكل</span>
-                        </div>
+                        {statusFilter !== 'all' && (
+                            <div className="flex items-center gap-2 px-2 text-sm text-gray-500 font-medium">
+                                <input type="checkbox" onChange={toggleSelectAll} checked={selectedIds.size === filteredReservations.length && filteredReservations.length > 0} className="w-4 h-4 rounded border-gray-300 text-sea-600 focus:ring-sea-500" />
+                                <span>تحديد الكل</span>
+                            </div>
+                        )}
                         {filteredReservations.map(res => (
                             <Card key={res.id} className={`p-4 flex flex-col md:flex-row items-center gap-4 transition-all ${selectedIds.has(res.id) ? 'ring-2 ring-sea-500 bg-sea-50' : 'hover:border-sea-300'}`}>
-                                <input type="checkbox" checked={selectedIds.has(res.id)} onChange={() => toggleSelect(res.id)} className="w-5 h-5 rounded border-gray-300 text-sea-600 focus:ring-sea-500" />
+                                {statusFilter !== 'all' && (
+                                    <input type="checkbox" checked={selectedIds.has(res.id)} onChange={() => toggleSelect(res.id)} className="w-5 h-5 rounded border-gray-300 text-sea-600 focus:ring-sea-500" />
+                                )}
                                 
                                 <div className="flex-1 w-full md:w-auto">
                                     <div className="flex justify-between items-start">
@@ -750,12 +877,15 @@ const ProviderReservations = () => {
                                         <span className="flex items-center gap-1 bg-gray-100 px-2 rounded"><ShoppingBagIcon className="w-4 h-4"/> x{res.quantity}</span>
                                         <span className="flex items-center gap-1 font-bold text-sea-700"><CurrencyDollarIcon className="w-4 h-4"/> {res.totalPrice} ر.ي</span>
                                     </div>
+                                    {/* Payment Ref Display */}
+                                    {res.paymentReference && (
+                                        <div className="mt-2 bg-green-50 text-green-800 text-xs px-2 py-1 rounded inline-flex items-center gap-1">
+                                            <BanknotesIcon className="w-3 h-3"/> مرجع الدفع: {res.paymentReference}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex items-center gap-2 w-full md:w-auto justify-end border-t md:border-t-0 pt-3 md:pt-0 mt-3 md:mt-0">
-                                    {res.paymentProofUrl && (
-                                        <a href={res.paymentProofUrl} target="_blank" className="text-xs text-blue-600 font-bold hover:underline flex items-center gap-1 bg-blue-50 px-2 py-1 rounded border border-blue-100"><PhotoIcon className="w-4 h-4"/> إيصال</a>
-                                    )}
                                     {res.status === 'pending' && (
                                         <>
                                             <Button variant="ghost" onClick={() => handleSingleStatus(res.id, 'confirmed')} className="text-green-600 bg-green-50 hover:bg-green-100"><CheckCircleIcon className="w-5 h-5"/></Button>
@@ -771,8 +901,8 @@ const ProviderReservations = () => {
                     </div>
                 )}
 
-                {/* VIEW MODE: GROUP BY CUSTOMER */}
-                {groupBy === 'customer' && groupedReservations && (
+                {/* VIEW MODE: GROUPED */}
+                {(groupBy !== 'none') && groupedReservations && (
                     <div className="space-y-6">
                         {groupedReservations.map((group, idx) => (
                             <div key={idx} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
@@ -788,22 +918,24 @@ const ProviderReservations = () => {
                                     </div>
                                     <div className="text-right">
                                         <div className="text-lg font-bold text-sea-700">{group.total} ر.ي</div>
-                                        <div className="text-xs text-gray-400">إجمالي العميل</div>
+                                        <div className="text-xs text-gray-400">الإجمالي</div>
                                     </div>
                                 </div>
                                 <div className="divide-y divide-gray-100">
                                     {group.items.map(res => (
                                         <div key={res.id} className="p-4 hover:bg-gray-50 flex justify-between items-center">
                                             <div className="flex items-center gap-3">
-                                                <input type="checkbox" checked={selectedIds.has(res.id)} onChange={() => toggleSelect(res.id)} className="w-4 h-4 rounded text-sea-600" />
+                                                {statusFilter !== 'all' && (
+                                                    <input type="checkbox" checked={selectedIds.has(res.id)} onChange={() => toggleSelect(res.id)} className="w-4 h-4 rounded text-sea-600" />
+                                                )}
                                                 <div>
-                                                    <p className="font-medium text-sm text-gray-800">{res.offeringName} (x{res.quantity})</p>
+                                                    <p className="font-medium text-sm text-gray-800">{groupBy === 'item' ? res.customerName : res.offeringName} (x{res.quantity})</p>
                                                     <p className="text-xs text-gray-500">{new Date(res.createdAt).toLocaleTimeString('ar-SA')}</p>
+                                                    {res.paymentReference && <span className="text-[10px] text-green-600 font-bold block">سند: {res.paymentReference}</span>}
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-3">
                                                 <Badge status={res.status} />
-                                                {res.paymentProofUrl && <PhotoIcon className="w-5 h-5 text-blue-400"/>}
                                             </div>
                                         </div>
                                     ))}
@@ -817,6 +949,188 @@ const ProviderReservations = () => {
         </div>
     );
 };
+
+// ... [ProviderCatalog, ProviderOffers unchanged] ...
+
+// --- UPGRADED CUSTOMER RESERVATIONS (MyOrders) ---
+const MyReservations = () => {
+    const { userProfile } = useContext(AuthContext);
+    const { showToast } = useContext(ToastContext);
+    const [reservations, setReservations] = useState<Reservation[]>([]);
+    const [loading, setLoading] = useState(true);
+    
+    // UI States
+    const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [paymentRefs, setPaymentRefs] = useState<Record<string, string>>({});
+
+    const fetchRes = async () => {
+        if (!userProfile) return;
+        setLoading(true);
+        try {
+            const q = query(collection(db, 'reservations'), where('customerId', '==', userProfile.uid));
+            const snap = await getDocs(q);
+            const data = snap.docs.map(d => ({id: d.id, ...d.data()} as Reservation));
+            setReservations(data);
+        } catch(e) { 
+            console.error(e);
+            showToast("فشل تحميل طلباتي", 'error'); 
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { fetchRes(); }, [userProfile]);
+
+    const handleUpdatePaymentRef = async (id: string) => {
+        const val = paymentRefs[id];
+        if(!val) return;
+        try {
+            await updateDoc(doc(db, 'reservations', id), { paymentReference: val });
+            showToast("تم إرسال رقم السند", "success");
+            fetchRes();
+        } catch(e) { showToast("فشل التحديث", "error"); }
+    };
+
+    const cancelReservation = async (id: string) => {
+        if(!confirm("هل أنت متأكد من إلغاء الطلب؟")) return;
+        try {
+            await updateDoc(doc(db, 'reservations', id), { status: 'cancelled' });
+            showToast("تم إلغاء الطلب", "info");
+            fetchRes();
+        } catch(e) { showToast("فشل الإلغاء", "error"); }
+    }
+
+    const filteredReservations = useMemo(() => {
+        let res = reservations;
+        if(statusFilter !== 'all') res = res.filter(r => r.status === statusFilter);
+        if(searchQuery) res = res.filter(r => r.offeringName.includes(searchQuery));
+        return res.sort((a,b) => b.createdAt - a.createdAt);
+    }, [reservations, statusFilter, searchQuery]);
+
+    if(loading) return <LoadingSpinner />;
+
+    return (
+        <div className="p-4 md:p-6 max-w-4xl mx-auto min-h-screen">
+             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
+                        <ShoppingBagIcon className="w-8 h-8 text-sea-600"/> طلباتي
+                    </h1>
+                    <p className="text-gray-500 text-sm mt-1">تابع حالة طلباتك وسجل المدفوعات</p>
+                </div>
+            </div>
+
+             {/* Controls Toolbar */}
+             <Card className="p-4 flex flex-col lg:flex-row gap-4 justify-between items-center mb-6 shadow-md">
+                <div className="flex flex-1 w-full gap-4 flex-col sm:flex-row">
+                    <div className="relative flex-1">
+                        <MagnifyingGlassIcon className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
+                        <input 
+                            type="text" 
+                            placeholder="بحث في طلباتي..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pr-10 pl-4 py-2 border rounded-lg focus:ring-2 focus:ring-sea-500 outline-none"
+                        />
+                    </div>
+                    <div className="flex bg-gray-100 p-1 rounded-lg overflow-x-auto">
+                        {['all', 'pending', 'confirmed', 'completed', 'cancelled'].map(st => (
+                            <button
+                                key={st}
+                                onClick={() => setStatusFilter(st)}
+                                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${statusFilter === st ? 'bg-white shadow text-sea-700' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                {st === 'all' && 'الكل'}
+                                {st === 'pending' && 'معلق'}
+                                {st === 'confirmed' && 'مؤكد'}
+                                {st === 'completed' && 'مكتمل'}
+                                {st === 'cancelled' && 'ملغي'}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+             </Card>
+
+            <div className="space-y-4">
+                {filteredReservations.length === 0 ? (
+                     <div className="text-center py-12 bg-white rounded-lg shadow-sm">
+                        <ShoppingBagIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                        <p className="text-gray-500">لا توجد طلبات</p>
+                    </div>
+                ) : filteredReservations.map(res => (
+                    <Card key={res.id} className="p-6">
+                        <div className="flex flex-col md:flex-row justify-between gap-6">
+                            <div className="flex-1">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h3 className="font-bold text-xl text-sea-800">{res.offeringName}</h3>
+                                    <Badge status={res.status} />
+                                </div>
+                                <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-3">
+                                    <span>الكمية: <b className="text-gray-900">{res.quantity}</b></span>
+                                    <span>الإجمالي: <b className="text-sea-700">{res.totalPrice} ر.ي</b></span>
+                                    <span className="text-gray-400">{new Date(res.createdAt).toLocaleDateString('ar-SA')}</span>
+                                </div>
+                                
+                                {res.status === 'pending' && (
+                                    <div className="bg-orange-50 p-3 rounded-lg border border-orange-100 mt-2">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <BanknotesIcon className="w-5 h-5 text-orange-600"/>
+                                            <span className="font-bold text-sm text-orange-800">تأكيد الدفع</span>
+                                        </div>
+                                        {res.paymentReference ? (
+                                            <div className="text-sm text-green-700 font-bold flex items-center gap-2">
+                                                <CheckCircleIcon className="w-4 h-4"/> تم إرسال الرقم: {res.paymentReference}
+                                            </div>
+                                        ) : (
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="رقم السند / عمقي / الكريمي" 
+                                                    className="flex-1 border p-2 rounded text-sm outline-none focus:border-orange-400"
+                                                    value={paymentRefs[res.id] || ''}
+                                                    onChange={e => setPaymentRefs({...paymentRefs, [res.id]: e.target.value})}
+                                                />
+                                                <Button 
+                                                    onClick={() => handleUpdatePaymentRef(res.id)} 
+                                                    className="bg-orange-500 hover:bg-orange-600 text-xs px-3"
+                                                >
+                                                    إرسال
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {/* Actions Column */}
+                            <div className="flex flex-col justify-center items-end border-t md:border-t-0 md:border-r md:pr-4 pt-4 md:pt-0 border-gray-100">
+                                {res.status === 'pending' && (
+                                    <button onClick={() => cancelReservation(res.id)} className="text-red-500 text-sm hover:underline hover:text-red-700 font-medium">
+                                        إلغاء الطلب
+                                    </button>
+                                )}
+                                {res.status === 'confirmed' && (
+                                    <div className="text-center">
+                                        <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold mb-1">جاري التحضير</div>
+                                        <p className="text-xs text-gray-400">تواصل مع الطاهي للاستلام</p>
+                                    </div>
+                                )}
+                                {res.status === 'completed' && (
+                                    <div className="flex items-center gap-1 text-green-600 font-bold text-sm">
+                                        <CheckBadgeIcon className="w-5 h-5"/> تم الاستلام
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </Card>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// ... [ProvidersList, ProtectedRoute, AppContent, App unchanged - must re-export] ...
 
 const ProviderCatalog = () => {
     const { userProfile } = useContext(AuthContext);
@@ -1040,267 +1354,151 @@ const ProviderOffers = () => {
 };
 
 const CustomerHome = () => {
-    const { userProfile } = useContext(AuthContext);
+    const { userProfile, currentUser } = useContext(AuthContext);
     const { showToast } = useContext(ToastContext);
     const [offers, setOffers] = useState<Offering[]>([]);
-    const [selectedOffer, setSelectedOffer] = useState<Offering | null>(null);
-    const [quantity, setQuantity] = useState(1);
-    const [booking, setBooking] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState<'all' | 'following'>('all');
+    const [filter, setFilter] = useState('');
 
-    const fetchOffers = async () => {
-        setLoading(true);
-        const today = new Date().toISOString().split('T')[0];
-        let q = query(collection(db, 'offerings'), where('date', '==', today), where('isActive', '==', true));
-        
-        try {
-            if (viewMode === 'following' && userProfile) {
-                const followsSnap = await getDocs(query(collection(db, 'follows'), where('customerId', '==', userProfile.uid)));
-                const followedProviderIds = followsSnap.docs.map(d => d.data().providerId);
-                
-                if (followedProviderIds.length > 0) {
-                     const allSnap = await getDocs(q);
-                     const allOffers = allSnap.docs.map(d => ({id: d.id, ...d.data()} as Offering));
-                     setOffers(allOffers.filter(o => followedProviderIds.includes(o.providerId)));
-                } else {
-                    setOffers([]);
-                }
-            } else {
-                const snapshot = await getDocs(q);
-                setOffers(snapshot.docs.map(d => ({id: d.id, ...d.data()} as Offering)));
+    useEffect(() => {
+        const fetchOffers = async () => {
+            try {
+                // Fetch active offers
+                const q = query(collection(db, 'offerings'), where('isActive', '==', true));
+                const snap = await getDocs(q);
+                let data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Offering));
+                // Only show offers with remaining quantity
+                data = data.filter(o => o.quantityRemaining > 0);
+                setOffers(data);
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setLoading(false);
             }
-        } catch(e) {
-            console.error(e);
+        };
+        fetchOffers();
+    }, []);
+
+    const handleReserve = async (offer: Offering) => {
+        if (!currentUser) {
+            showToast("يجب تسجيل الدخول للحجز", "info");
+            window.location.hash = '/login';
+            return;
         }
-        setLoading(false);
-    };
+        
+        // Optimistic UI could be used, but keeping it simple
+        if (!confirm(`تأكيد حجز ${offer.itemName} بسعر ${offer.price} ر.ي؟`)) return;
 
-    useEffect(() => { fetchOffers(); }, [viewMode, userProfile]);
-
-    const handleBook = async () => {
-        if (!selectedOffer || !userProfile) return;
-        setBooking(true);
         try {
-            await addDoc(collection(db, 'reservations'), {
-                offeringId: selectedOffer.id,
-                customerId: userProfile.uid,
-                customerName: userProfile.name,
-                providerId: selectedOffer.providerId,
-                offeringName: selectedOffer.itemName,
-                quantity: quantity,
-                totalPrice: quantity * selectedOffer.price,
+            // 1. Create Reservation
+            const reservationData: any = {
+                offeringId: offer.id,
+                customerId: currentUser.uid,
+                providerId: offer.providerId,
+                offeringName: offer.itemName,
+                customerName: userProfile?.name || 'Unknown',
+                quantity: 1,
+                totalPrice: offer.price,
                 status: 'pending',
                 createdAt: Date.now()
+            };
+
+            await addDoc(collection(db, 'reservations'), reservationData);
+
+            // 2. Decrement Quantity
+            await updateDoc(doc(db, 'offerings', offer.id), {
+                quantityRemaining: increment(-1)
             });
 
-            await updateDoc(doc(db, 'offerings', selectedOffer.id), {
-                quantityRemaining: increment(-quantity)
-            });
+            showToast("تم الحجز بنجاح! تابع طلبك في 'طلباتي'", "success");
+            
+            // Update local state to reflect change immediately
+            setOffers(prev => prev.map(o => {
+                if(o.id === offer.id) return {...o, quantityRemaining: o.quantityRemaining - 1};
+                return o;
+            }).filter(o => o.quantityRemaining > 0));
 
-            showToast("تم إرسال الطلب! تابع حالة الطلب من صفحة طلباتي", "success");
-            setSelectedOffer(null);
-            setQuantity(1);
-            fetchOffers();
         } catch (e) {
-            showToast("فشل الحجز، حاول مرة أخرى", "error");
+            console.error(e);
+            showToast("حدث خطأ أثناء الحجز", "error");
         }
-        setBooking(false);
     };
+
+    if (loading) return <LoadingSpinner />;
+
+    const displayedOffers = offers.filter(o => o.itemName.toLowerCase().includes(filter.toLowerCase()));
 
     return (
         <div className="p-6 max-w-7xl mx-auto min-h-screen">
-            <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                <div>
-                    <h1 className="text-3xl font-extrabold text-sea-900">عروض الصيد اليوم 🎣</h1>
-                    <p className="text-gray-500 mt-1">اغتنم الفرصة واحجز أشهى المأكولات البحرية الطازجة</p>
-                </div>
-                {userProfile && (
-                     <div className="flex bg-white rounded-full p-1 shadow-sm border border-gray-200">
-                        <button onClick={() => setViewMode('all')} className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${viewMode === 'all' ? 'bg-sea-600 text-white shadow' : 'text-gray-500 hover:bg-gray-50'}`}>الكل</button>
-                        <button onClick={() => setViewMode('following')} className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${viewMode === 'following' ? 'bg-sea-600 text-white shadow' : 'text-gray-500 hover:bg-gray-50'}`}>المتابعون</button>
+             {/* Hero Section */}
+             <div className="bg-gradient-to-r from-sea-800 to-sea-600 rounded-2xl p-8 mb-10 text-white shadow-xl flex flex-col md:flex-row items-center justify-between animate-fade-in relative overflow-hidden">
+                <div className="relative z-10">
+                    <h1 className="text-3xl md:text-5xl font-bold mb-4 font-sans">صيد البحر الطازج</h1>
+                    <p className="text-sea-100 text-lg mb-8 max-w-xl leading-relaxed">من الشاطئ إلى مائدتك مباشرة. اكتشف أشهى المأكولات البحرية من أمهر الطهاة المحليين.</p>
+                    
+                    <div className="bg-white/10 p-2 rounded-xl inline-flex items-center backdrop-blur-md border border-white/20 w-full max-w-md shadow-lg transition-all focus-within:bg-white/20">
+                        <MagnifyingGlassIcon className="w-6 h-6 ml-3 text-sea-200" />
+                        <input 
+                            type="text" 
+                            placeholder="ابحث عن وجبة، سمك، جمبري..." 
+                            className="bg-transparent border-none text-white placeholder-sea-300 focus:ring-0 outline-none w-full font-medium"
+                            value={filter}
+                            onChange={(e) => setFilter(e.target.value)}
+                        />
                     </div>
-                )}
-            </div>
-
-            {loading ? <LoadingSpinner /> : offers.length === 0 ? (
-                <div className="text-center py-24 bg-white rounded-2xl shadow-sm border border-dashed border-gray-300">
-                    <div className="text-6xl mb-4">🤷‍♂️</div>
-                    <h3 className="text-xl font-bold text-gray-700">لا توجد عروض حالياً</h3>
-                    <p className="text-gray-500">عد لاحقاً أو جرب تغيير الفلتر</p>
                 </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {offers.map(offer => {
-                        const isMyOffer = userProfile?.uid === offer.providerId;
-                        const soldOut = offer.quantityRemaining === 0;
+                <div className="text-[150px] leading-none mt-6 md:mt-0 opacity-20 md:opacity-100 absolute md:relative right-[-50px] md:right-0 rotate-12 md:rotate-0 transition-transform hover:rotate-12 duration-500 select-none">
+                    🐟
+                </div>
+             </div>
 
-                        return (
-                        <Card key={offer.id} className="group flex flex-col h-full border-t-4 border-t-sea-400">
-                            <div className="h-56 overflow-hidden relative">
-                                <img src={offer.itemImageUrl} alt={offer.itemName} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-                                <div className="absolute top-0 right-0 bg-sea-600 text-white px-3 py-1 rounded-bl-lg font-bold shadow">
-                                    {offer.price} ر.ي
+             <div className="flex items-center gap-3 mb-8">
+                <div className="p-2 bg-sea-100 rounded-full text-sea-600"><CalendarDaysIcon className="w-6 h-6"/></div>
+                <h2 className="text-2xl font-bold text-gray-800">عروض اليوم المتاحة</h2>
+             </div>
+             
+             {displayedOffers.length === 0 ? (
+                 <div className="text-center py-20 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                    <div className="text-6xl mb-4">🦐</div>
+                    <p className="text-gray-500 text-xl font-medium">لا توجد عروض مطابقة حالياً</p>
+                    <p className="text-gray-400 mt-2">حاول البحث عن شيء آخر أو عد لاحقاً</p>
+                 </div>
+             ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {displayedOffers.map(offer => (
+                        <Card key={offer.id} className="group hover:-translate-y-2 transition-all duration-300 flex flex-col h-full border-gray-100 hover:shadow-xl hover:border-sea-200">
+                            <div className="h-56 overflow-hidden relative bg-gray-200">
+                                <img src={offer.itemImageUrl || 'https://placehold.co/400?text=SeaFood'} alt={offer.itemName} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                                <div className="absolute top-3 right-3 bg-white/95 backdrop-blur text-sea-800 px-3 py-1 rounded-lg text-sm font-bold shadow-md flex items-center gap-1">
+                                    <CurrencyDollarIcon className="w-4 h-4"/> {offer.price}
                                 </div>
-                                {soldOut && <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-bold text-xl backdrop-blur-sm">نفذت الكمية</div>}
+                                {offer.quantityRemaining < 5 && (
+                                    <div className="absolute bottom-3 left-3 bg-red-500/90 backdrop-blur text-white px-2 py-1 rounded-md text-xs font-bold animate-pulse shadow-sm">
+                                        🔥 متبقي {offer.quantityRemaining}
+                                    </div>
+                                )}
                             </div>
-                            <div className="p-5 flex-1 flex flex-col">
-                                <h3 className="font-bold text-xl text-gray-800 mb-1">{offer.itemName}</h3>
-                                <div className="text-sm text-gray-500 mb-4 flex justify-between">
-                                    <span>المتبقي: {offer.quantityRemaining} وجبة</span>
+                            <div className="p-5 flex flex-col flex-1">
+                                <div className="flex-1">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h3 className="font-bold text-lg text-gray-900 leading-tight">{offer.itemName}</h3>
+                                    </div>
+                                    <p className="text-xs text-gray-500 flex items-center gap-1 mb-4 bg-gray-50 p-2 rounded-lg">
+                                        <UserIcon className="w-3 h-3"/> مقدم الخدمة: {offer.providerId.substring(0,8)}...
+                                    </p>
                                 </div>
-                                
-                                <div className="mt-auto pt-4 border-t border-gray-100">
-                                    {isMyOffer ? (
-                                        <div className="w-full py-2 text-center text-sm font-bold text-sea-600 bg-sea-50 rounded-lg border border-sea-100">
-                                            🌟 هذا العرض خاص بك
-                                        </div>
-                                    ) : (
-                                        <Button 
-                                            onClick={() => setSelectedOffer(offer)}
-                                            disabled={soldOut || !userProfile}
-                                            className="w-full shadow-sea-200"
-                                        >
-                                            {soldOut ? 'نفذت الكمية' : userProfile ? 'حجز الآن' : 'سجل للحجز'}
-                                        </Button>
-                                    )}
-                                </div>
+                                <Button 
+                                    onClick={() => handleReserve(offer)} 
+                                    className="w-full mt-2 group-hover:bg-sea-700 transition-colors"
+                                    disabled={offer.quantityRemaining <= 0}
+                                >
+                                    {offer.quantityRemaining > 0 ? 'حجز الطلب الآن' : 'نفذت الكمية'}
+                                </Button>
                             </div>
                         </Card>
-                    )})}
+                    ))}
                 </div>
-            )}
-
-            {/* Modal */}
-            {selectedOffer && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-fade-in">
-                    <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-slide-up">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-bold text-gray-800">تأكيد الحجز</h2>
-                            <button onClick={() => setSelectedOffer(null)} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-6 h-6"/></button>
-                        </div>
-                        
-                        <div className="flex items-center gap-4 mb-6 bg-sea-50 p-3 rounded-xl">
-                            <img src={selectedOffer.itemImageUrl} className="w-16 h-16 rounded-lg object-cover" alt="" />
-                            <div>
-                                <h3 className="font-bold text-sm">{selectedOffer.itemName}</h3>
-                                <div className="text-sea-700 font-bold">{selectedOffer.price} ر.ي / وجبة</div>
-                            </div>
-                        </div>
-
-                        <div className="mb-6">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">عدد الوجبات</label>
-                            <div className="flex items-center gap-3">
-                                <button className="w-10 h-10 rounded-full border flex items-center justify-center hover:bg-gray-100" onClick={() => setQuantity(Math.max(1, quantity - 1))}>-</button>
-                                <span className="text-xl font-bold w-8 text-center">{quantity}</span>
-                                <button className="w-10 h-10 rounded-full border flex items-center justify-center hover:bg-gray-100" onClick={() => setQuantity(Math.min(selectedOffer.quantityRemaining, quantity + 1))}>+</button>
-                            </div>
-                        </div>
-
-                        <div className="flex justify-between items-center mb-6 text-lg font-bold border-t pt-4">
-                            <span>الإجمالي</span>
-                            <span className="text-sea-700">{quantity * selectedOffer.price} ر.ي</span>
-                        </div>
-
-                        <Button onClick={handleBook} isLoading={booking} className="w-full py-3 text-lg">
-                            تأكيد الطلب
-                        </Button>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
-
-const MyReservations = () => {
-    const { userProfile } = useContext(AuthContext);
-    const { showToast } = useContext(ToastContext);
-    const [reservations, setReservations] = useState<Reservation[]>([]);
-    const [uploadingId, setUploadingId] = useState<string | null>(null);
-
-    const fetchRes = async () => {
-        if (!userProfile) return;
-        try {
-            // REMOVE orderBy here to avoid "Missing Index" error if the user hasn't created one
-            const q = query(collection(db, 'reservations'), where('customerId', '==', userProfile.uid));
-            const snap = await getDocs(q);
-            const data = snap.docs.map(d => ({id: d.id, ...d.data()} as Reservation));
-            
-            // Client-side sorting
-            data.sort((a, b) => b.createdAt - a.createdAt);
-            setReservations(data);
-        } catch(e) { 
-            console.error(e);
-            showToast("فشل تحميل طلباتي", 'error'); 
-        }
-    };
-
-    useEffect(() => { fetchRes(); }, [userProfile]);
-
-    const handleUploadPayment = async (file: File, resId: string) => {
-        setUploadingId(resId);
-        try {
-            const url = await uploadFile(file, `payments/${userProfile?.uid}/${resId}`);
-            await updateDoc(doc(db, 'reservations', resId), { paymentProofUrl: url });
-            showToast("تم رفع السند بنجاح! بانتظار تأكيد الطاهي", "success");
-            fetchRes();
-        } catch (e) {
-            showToast("فشل الرفع", "error");
-        }
-        setUploadingId(null);
-    };
-
-    const cancelReservation = async (id: string) => {
-        if(!confirm("هل أنت متأكد من إلغاء الطلب؟")) return;
-        try {
-            await updateDoc(doc(db, 'reservations', id), { status: 'cancelled' });
-            showToast("تم إلغاء الطلب", "info");
-            fetchRes();
-        } catch(e) { showToast("فشل الإلغاء", "error"); }
-    }
-
-    return (
-        <div className="p-6 max-w-4xl mx-auto min-h-screen">
-            <h1 className="text-3xl font-bold mb-6 text-gray-800">طلباتي</h1>
-            <div className="space-y-4">
-                {reservations.map(res => (
-                    <Card key={res.id} className="p-6">
-                        <div className="flex flex-col md:flex-row justify-between gap-4">
-                            <div>
-                                <div className="flex items-center gap-3 mb-2">
-                                    <h3 className="font-bold text-xl">{res.offeringName}</h3>
-                                    <Badge status={res.status} />
-                                </div>
-                                <p className="text-gray-500 text-sm mb-1">الكمية: <span className="font-bold text-gray-800">{res.quantity}</span> | الإجمالي: <span className="font-bold text-sea-700">{res.totalPrice} ر.ي</span></p>
-                                <p className="text-xs text-gray-400">{new Date(res.createdAt).toLocaleDateString('ar-SA')} {new Date(res.createdAt).toLocaleTimeString('ar-SA')}</p>
-                            </div>
-                            
-                            {res.status === 'pending' && (
-                                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200 md:w-1/2">
-                                    {!res.paymentProofUrl ? (
-                                        <>
-                                            <p className="text-sm font-bold text-yellow-800 mb-2">⚠ يرجى تحويل المبلغ وإرفاق الإيصال لتأكيد الحجز</p>
-                                            <div className="flex gap-2">
-                                                <label className={`flex-1 cursor-pointer bg-white border border-yellow-300 rounded px-3 py-2 text-center text-sm font-bold text-yellow-700 hover:bg-yellow-100 transition-colors ${uploadingId === res.id ? 'opacity-50' : ''}`}>
-                                                    {uploadingId === res.id ? 'جاري الرفع...' : '📤 رفع الإيصال'}
-                                                    <input type="file" className="hidden" accept="image/*" disabled={!!uploadingId} onChange={(e) => e.target.files && handleUploadPayment(e.target.files[0], res.id)} />
-                                                </label>
-                                                <button onClick={() => cancelReservation(res.id)} className="text-red-500 text-sm hover:underline px-2">إلغاء الطلب</button>
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <div className="flex flex-col items-center text-center">
-                                            <CheckCircleIcon className="w-8 h-8 text-green-500 mb-1"/>
-                                            <p className="text-sm text-green-700 font-bold">تم إرسال الإيصال</p>
-                                            <p className="text-xs text-gray-500">بانتظار موافقة الطاهي</p>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </Card>
-                ))}
-            </div>
+             )}
         </div>
     );
 };
