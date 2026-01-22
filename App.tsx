@@ -507,7 +507,7 @@ const ProviderDashboard = () => {
         <StatCard title="الأصناف" value={stats.items} color="#3b82f6" icon={<ShoppingBagIcon className="w-6 h-6"/>} />
         <StatCard title="العروض النشطة" value={stats.offers} color="#10b981" icon={<CalendarIcon className="w-6 h-6"/>} />
         <StatCard title="الطلبات" value={stats.reservations} color="#f59e0b" icon={<ClipboardDocumentCheckIcon className="w-6 h-6"/>} />
-        <StatCard title="الإيرادات" value={`${stats.revenue.toLocaleString()} ر.س`} color="#8b5cf6" icon={<CurrencyDollarIcon className="w-6 h-6"/>} />
+        <StatCard title="الإيرادات" value={`${stats.revenue.toLocaleString()} ر.ي`} color="#8b5cf6" icon={<CurrencyDollarIcon className="w-6 h-6"/>} />
       </div>
     </div>
   );
@@ -522,11 +522,17 @@ const ProviderReservations = () => {
     const fetchReservations = async () => {
         if(!userProfile) return;
         try {
-            const q = query(collection(db, 'reservations'), where('providerId', '==', userProfile.uid), orderBy('createdAt', 'desc'));
+            // REMOVE orderBy here to avoid "Missing Index" error if the user hasn't created one
+            const q = query(collection(db, 'reservations'), where('providerId', '==', userProfile.uid));
             const snap = await getDocs(q);
-            setReservations(snap.docs.map(d => ({id: d.id, ...d.data()} as Reservation)));
+            const data = snap.docs.map(d => ({id: d.id, ...d.data()} as Reservation));
+            
+            // Client-side sorting instead
+            data.sort((a, b) => b.createdAt - a.createdAt);
+            setReservations(data);
         } catch(e) {
             console.error(e);
+            showToast("فشل تحميل البيانات، يرجى المحاولة لاحقاً", 'error');
         } finally {
             setLoading(false);
         }
@@ -569,7 +575,7 @@ const ProviderReservations = () => {
                                         <UserGroupIcon className="w-4 h-4" /> العميل: <span className="font-semibold">{res.customerName}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <ShoppingBagIcon className="w-4 h-4" /> الكمية: {res.quantity} | الإجمالي: <span className="text-sea-700 font-bold">{res.totalPrice} ر.س</span>
+                                        <ShoppingBagIcon className="w-4 h-4" /> الكمية: {res.quantity} | الإجمالي: <span className="text-sea-700 font-bold">{res.totalPrice} ر.ي</span>
                                     </div>
                                     <div className="flex items-center gap-2 text-sm text-gray-400">
                                         <ClockIcon className="w-4 h-4" /> {new Date(res.createdAt).toLocaleDateString('ar-SA')} {new Date(res.createdAt).toLocaleTimeString('ar-SA')}
@@ -697,7 +703,7 @@ const ProviderCatalog = () => {
                             <div className="h-48 overflow-hidden bg-gray-100">
                                 <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                                 <div className="absolute top-2 left-2 bg-white/90 backdrop-blur px-2 py-1 rounded text-sm font-bold text-sea-800 shadow-sm">
-                                    {item.priceDefault} ر.س
+                                    {item.priceDefault} ر.ي
                                 </div>
                             </div>
                             <div className="p-4">
@@ -826,7 +832,7 @@ const ProviderOffers = () => {
                                     </div>
                                  </div>
                             </div>
-                            <div className="text-xl font-bold text-sea-700">{offer.price} <span className="text-sm font-normal">ر.س</span></div>
+                            <div className="text-xl font-bold text-sea-700">{offer.price} <span className="text-sm font-normal">ر.ي</span></div>
                         </div>
                     ))}
                 </div>
@@ -938,7 +944,7 @@ const CustomerHome = () => {
                             <div className="h-56 overflow-hidden relative">
                                 <img src={offer.itemImageUrl} alt={offer.itemName} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
                                 <div className="absolute top-0 right-0 bg-sea-600 text-white px-3 py-1 rounded-bl-lg font-bold shadow">
-                                    {offer.price} ر.س
+                                    {offer.price} ر.ي
                                 </div>
                                 {soldOut && <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-bold text-xl backdrop-blur-sm">نفذت الكمية</div>}
                             </div>
@@ -982,7 +988,7 @@ const CustomerHome = () => {
                             <img src={selectedOffer.itemImageUrl} className="w-16 h-16 rounded-lg object-cover" alt="" />
                             <div>
                                 <h3 className="font-bold text-sm">{selectedOffer.itemName}</h3>
-                                <div className="text-sea-700 font-bold">{selectedOffer.price} ر.س / وجبة</div>
+                                <div className="text-sea-700 font-bold">{selectedOffer.price} ر.ي / وجبة</div>
                             </div>
                         </div>
 
@@ -997,7 +1003,7 @@ const CustomerHome = () => {
 
                         <div className="flex justify-between items-center mb-6 text-lg font-bold border-t pt-4">
                             <span>الإجمالي</span>
-                            <span className="text-sea-700">{quantity * selectedOffer.price} ر.س</span>
+                            <span className="text-sea-700">{quantity * selectedOffer.price} ر.ي</span>
                         </div>
 
                         <Button onClick={handleBook} isLoading={booking} className="w-full py-3 text-lg">
@@ -1019,10 +1025,18 @@ const MyReservations = () => {
     const fetchRes = async () => {
         if (!userProfile) return;
         try {
-            const q = query(collection(db, 'reservations'), where('customerId', '==', userProfile.uid), orderBy('createdAt', 'desc'));
+            // REMOVE orderBy here to avoid "Missing Index" error if the user hasn't created one
+            const q = query(collection(db, 'reservations'), where('customerId', '==', userProfile.uid));
             const snap = await getDocs(q);
-            setReservations(snap.docs.map(d => ({id: d.id, ...d.data()} as Reservation)));
-        } catch(e) { console.error(e); }
+            const data = snap.docs.map(d => ({id: d.id, ...d.data()} as Reservation));
+            
+            // Client-side sorting
+            data.sort((a, b) => b.createdAt - a.createdAt);
+            setReservations(data);
+        } catch(e) { 
+            console.error(e);
+            showToast("فشل تحميل طلباتي", 'error'); 
+        }
     };
 
     useEffect(() => { fetchRes(); }, [userProfile]);
@@ -1061,7 +1075,7 @@ const MyReservations = () => {
                                     <h3 className="font-bold text-xl">{res.offeringName}</h3>
                                     <Badge status={res.status} />
                                 </div>
-                                <p className="text-gray-500 text-sm mb-1">الكمية: <span className="font-bold text-gray-800">{res.quantity}</span> | الإجمالي: <span className="font-bold text-sea-700">{res.totalPrice} ر.س</span></p>
+                                <p className="text-gray-500 text-sm mb-1">الكمية: <span className="font-bold text-gray-800">{res.quantity}</span> | الإجمالي: <span className="font-bold text-sea-700">{res.totalPrice} ر.ي</span></p>
                                 <p className="text-xs text-gray-400">{new Date(res.createdAt).toLocaleDateString('ar-SA')} {new Date(res.createdAt).toLocaleTimeString('ar-SA')}</p>
                             </div>
                             
