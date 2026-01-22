@@ -1,11 +1,14 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 // Mock Router to replace missing react-router-dom
 const RouterContext = createContext({ path: window.location.hash.substring(1) || '/' });
 
 const HashRouter: React.FC<{children: React.ReactNode}> = ({ children }) => {
     const [path, setPath] = useState(window.location.hash.substring(1) || '/');
     useEffect(() => {
-        const handler = () => setPath(window.location.hash.substring(1) || '/');
+        const handler = () => {
+            window.scrollTo(0, 0); // Reset scroll on route change
+            setPath(window.location.hash.substring(1) || '/');
+        }
         window.addEventListener('hashchange', handler);
         return () => window.removeEventListener('hashchange', handler);
     }, []);
@@ -14,7 +17,6 @@ const HashRouter: React.FC<{children: React.ReactNode}> = ({ children }) => {
 
 const Routes: React.FC<{children: React.ReactNode}> = ({ children }) => {
     const { path } = useContext(RouterContext);
-    // Simple matching logic
     let found: React.ReactNode = null;
     React.Children.forEach(children, child => {
         if (found) return;
@@ -25,15 +27,13 @@ const Routes: React.FC<{children: React.ReactNode}> = ({ children }) => {
             }
         }
     });
-    return <>{found}</>;
+    return <div className="animate-fade-in">{found}</div>;
 };
 
 const Route: React.FC<{path: string, element: React.ReactNode}> = ({ element }) => <>{element}</>;
 
 const Link: React.FC<{to: string, children: React.ReactNode, className?: string}> = ({ to, children, className }) => (
-    <a href={`#${to}`} className={className} onClick={(e) => {
-        // Allow default hash behavior but helpful for SPA feel if needed
-    }}>{children}</a>
+    <a href={`#${to}`} className={className}>{children}</a>
 );
 
 const Navigate: React.FC<{to: string}> = ({ to }) => {
@@ -41,12 +41,6 @@ const Navigate: React.FC<{to: string}> = ({ to }) => {
     return null;
 };
 
-const useLocation = () => {
-    const { path } = useContext(RouterContext);
-    return { pathname: path };
-};
-
-// Consolidated imports from the mock service
 import { 
     auth, db, uploadFile,
     onAuthStateChanged, User, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, deleteUser,
@@ -65,8 +59,52 @@ import {
   TrashIcon, 
   CheckCircleIcon, 
   XCircleIcon, 
-  PhotoIcon 
+  PhotoIcon,
+  Bars3Icon,
+  XMarkIcon,
+  CurrencyDollarIcon,
+  MapPinIcon,
+  ClockIcon,
+  CloudArrowUpIcon,
+  FunnelIcon
 } from '@heroicons/react/24/outline';
+
+// --- Toast System ---
+interface Toast {
+    id: number;
+    message: string;
+    type: 'success' | 'error' | 'info';
+}
+
+const ToastContext = createContext<{ showToast: (msg: string, type?: 'success' | 'error' | 'info') => void }>({ showToast: () => {} });
+
+const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [toasts, setToasts] = useState<Toast[]>([]);
+
+    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+        const id = Date.now();
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+    };
+
+    return (
+        <ToastContext.Provider value={{ showToast }}>
+            {children}
+            <div className="fixed bottom-4 left-4 z-[100] flex flex-col gap-2">
+                {toasts.map(t => (
+                    <div key={t.id} className={`px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium flex items-center gap-2 animate-slide-up ${
+                        t.type === 'success' ? 'bg-green-600' : t.type === 'error' ? 'bg-red-600' : 'bg-sea-600'
+                    }`}>
+                        {t.type === 'success' && <CheckCircleIcon className="w-5 h-5" />}
+                        {t.type === 'error' && <XCircleIcon className="w-5 h-5" />}
+                        {t.type === 'info' && <CheckCircleIcon className="w-5 h-5" />}
+                        {t.message}
+                    </div>
+                ))}
+            </div>
+        </ToastContext.Provider>
+    );
+};
 
 // --- Auth Context ---
 interface AuthContextType {
@@ -84,11 +122,9 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Using the mock onAuthStateChanged which listens to our fake auth
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
-        // Fetch user profile from Firestore (mock)
         try {
             const userDoc = await getDoc(doc(db, 'users', user.uid));
             if (userDoc.exists()) {
@@ -107,6 +143,7 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
   const logout = async () => {
     await signOut(auth);
+    window.location.hash = '/login';
   };
 
   return (
@@ -116,98 +153,165 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   );
 };
 
-// --- Components ---
+// --- UI Components ---
 
 const LoadingSpinner = () => (
-  <div className="flex justify-center items-center h-full p-10">
-    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-sea-600"></div>
+  <div className="flex justify-center items-center h-full min-h-[50vh]">
+    <div className="relative">
+        <div className="w-12 h-12 rounded-full absolute border-4 border-solid border-gray-200"></div>
+        <div className="w-12 h-12 rounded-full animate-spin absolute border-4 border-solid border-sea-600 border-t-transparent"></div>
+    </div>
   </div>
 );
+
+const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'danger' | 'outline', isLoading?: boolean }> = ({ 
+    children, className = '', variant = 'primary', isLoading, disabled, ...props 
+}) => {
+    const baseStyle = "px-4 py-2 rounded-lg font-medium transition-all duration-200 active:scale-95 flex items-center justify-center gap-2";
+    const variants = {
+        primary: "bg-sea-600 hover:bg-sea-700 text-white shadow-md hover:shadow-lg disabled:bg-gray-300",
+        secondary: "bg-teal-500 hover:bg-teal-600 text-white shadow-md hover:shadow-lg disabled:bg-gray-300",
+        danger: "bg-red-500 hover:bg-red-600 text-white shadow-md hover:shadow-lg disabled:bg-gray-300",
+        outline: "border-2 border-sea-600 text-sea-600 hover:bg-sea-50 disabled:border-gray-300 disabled:text-gray-300"
+    };
+
+    return (
+        <button 
+            className={`${baseStyle} ${variants[variant]} ${className}`} 
+            disabled={disabled || isLoading}
+            {...props}
+        >
+            {isLoading && <svg className="animate-spin h-5 w-5 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>}
+            {!isLoading && children}
+        </button>
+    );
+};
+
+const Card: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ children, className = '', ...props }) => (
+    <div className={`bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow duration-300 ${className}`} {...props}>
+        {children}
+    </div>
+);
+
+const Badge: React.FC<{ status: string }> = ({ status }) => {
+    const styles: Record<string, string> = {
+        pending: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+        confirmed: 'bg-blue-100 text-blue-700 border-blue-200',
+        completed: 'bg-green-100 text-green-700 border-green-200',
+        cancelled: 'bg-red-100 text-red-700 border-red-200',
+    };
+    
+    const labels: Record<string, string> = {
+        pending: 'معلق',
+        confirmed: 'مؤكد',
+        completed: 'مكتمل',
+        cancelled: 'ملغي',
+    };
+
+    return (
+        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${styles[status] || 'bg-gray-100'}`}>
+            {labels[status] || status}
+        </span>
+    );
+};
 
 const Navbar = () => {
   const { userProfile, logout } = useContext(AuthContext);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
-    <nav className="bg-sea-900 text-white shadow-lg sticky top-0 z-50">
+    <nav className="bg-gradient-to-r from-sea-900 to-sea-700 text-white shadow-lg sticky top-0 z-50 backdrop-blur-sm bg-opacity-95">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <div className="flex items-center">
-            <Link to="/" className="text-2xl font-bold font-sans">🐟 صيد البحر</Link>
+          <div className="flex items-center gap-2">
+            <Link to="/" className="text-2xl font-bold font-sans flex items-center gap-2 hover:opacity-90 transition-opacity">
+               <span className="text-3xl">🐟</span> 
+               <span>صيد البحر</span>
+            </Link>
           </div>
+          
+          {/* Desktop Menu */}
           <div className="hidden md:block">
-            <div className="ml-10 flex items-baseline space-x-4 space-x-reverse">
+            <div className="ml-10 flex items-center space-x-4 space-x-reverse">
               {userProfile ? (
                 <>
-                  <span className="text-gray-300 ml-4">مرحباً، {userProfile.name}</span>
+                  <div className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full border border-white/20">
+                    <UserGroupIcon className="w-5 h-5 text-sea-200" />
+                    <span className="text-sm font-medium">{userProfile.name}</span>
+                  </div>
+
                   {userProfile.role === 'provider' && (
                     <>
-                      <Link to="/provider/dashboard" className="hover:bg-sea-700 px-3 py-2 rounded-md">لوحة التحكم</Link>
-                      <Link to="/provider/catalog" className="hover:bg-sea-700 px-3 py-2 rounded-md">الكتالوج</Link>
-                      <Link to="/provider/offers" className="hover:bg-sea-700 px-3 py-2 rounded-md">العروض</Link>
-                      <Link to="/provider/reservations" className="hover:bg-sea-700 px-3 py-2 rounded-md">الحجوزات</Link>
+                      <Link to="/provider/dashboard" className="nav-link">لوحة التحكم</Link>
+                      <Link to="/provider/catalog" className="nav-link">الكتالوج</Link>
+                      <Link to="/provider/offers" className="nav-link">العروض</Link>
+                      <Link to="/provider/reservations" className="nav-link">الحجوزات</Link>
                     </>
                   )}
                   {userProfile.role === 'customer' && (
                     <>
-                      <Link to="/" className="hover:bg-sea-700 px-3 py-2 rounded-md">العروض اليومية</Link>
-                      <Link to="/providers" className="hover:bg-sea-700 px-3 py-2 rounded-md">مقدمو الخدمة</Link>
-                      <Link to="/my-reservations" className="hover:bg-sea-700 px-3 py-2 rounded-md">طلباتي</Link>
+                      <Link to="/" className="nav-link">العروض اليومية</Link>
+                      <Link to="/providers" className="nav-link">مقدمو الخدمة</Link>
+                      <Link to="/my-reservations" className="nav-link">طلباتي</Link>
                     </>
                   )}
-                  <button onClick={logout} className="bg-red-500 hover:bg-red-600 px-3 py-2 rounded-md flex items-center">
-                    <ArrowRightOnRectangleIcon className="h-5 w-5 ml-1" /> خروج
+                  <button onClick={logout} className="bg-red-500/80 hover:bg-red-600 text-white p-2 rounded-full transition-colors" title="تسجيل الخروج">
+                    <ArrowRightOnRectangleIcon className="h-5 w-5" />
                   </button>
                 </>
               ) : (
                 <>
-                  <Link to="/login" className="hover:bg-sea-700 px-3 py-2 rounded-md">دخول</Link>
-                  <Link to="/register" className="bg-sea-500 hover:bg-sea-600 px-3 py-2 rounded-md">حساب جديد</Link>
+                  <Link to="/login" className="nav-link">دخول</Link>
+                  <Link to="/register" className="bg-white text-sea-800 hover:bg-sea-50 px-4 py-2 rounded-lg font-bold transition-all shadow-md transform hover:-translate-y-0.5">
+                    حساب جديد
+                  </Link>
                 </>
               )}
             </div>
           </div>
+
           {/* Mobile menu button */}
           <div className="-mr-2 flex md:hidden">
-            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="bg-sea-800 p-2 rounded-md text-gray-200 hover:text-white hover:bg-sea-700 focus:outline-none">
-              <span className="sr-only">Open main menu</span>
-              <svg className="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
+            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="bg-sea-800 p-2 rounded-md text-gray-200 hover:text-white focus:outline-none">
+              {isMenuOpen ? <XMarkIcon className="h-6 w-6" /> : <Bars3Icon className="h-6 w-6" />}
             </button>
           </div>
         </div>
       </div>
+      
       {/* Mobile Menu */}
       {isMenuOpen && (
-        <div className="md:hidden bg-sea-800">
-          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+        <div className="md:hidden bg-sea-800 border-t border-sea-700 animate-fade-in">
+          <div className="px-4 pt-2 pb-6 space-y-2">
              {userProfile ? (
                 <>
-                  <div className="text-gray-300 px-3 py-2">مرحباً، {userProfile.name}</div>
+                  <div className="text-sea-200 px-3 py-3 border-b border-sea-700 mb-2">مرحباً، {userProfile.name}</div>
                   {userProfile.role === 'provider' && (
                     <>
-                      <Link to="/provider/dashboard" className="block hover:bg-sea-700 px-3 py-2 rounded-md">لوحة التحكم</Link>
-                      <Link to="/provider/catalog" className="block hover:bg-sea-700 px-3 py-2 rounded-md">الكتالوج</Link>
-                      <Link to="/provider/offers" className="block hover:bg-sea-700 px-3 py-2 rounded-md">العروض</Link>
-                      <Link to="/provider/reservations" className="block hover:bg-sea-700 px-3 py-2 rounded-md">الحجوزات</Link>
+                      <Link to="/provider/dashboard" className="block mobile-nav-link">لوحة التحكم</Link>
+                      <Link to="/provider/catalog" className="block mobile-nav-link">الكتالوج</Link>
+                      <Link to="/provider/offers" className="block mobile-nav-link">العروض</Link>
+                      <Link to="/provider/reservations" className="block mobile-nav-link">الحجوزات</Link>
                     </>
                   )}
                   {userProfile.role === 'customer' && (
                     <>
-                      <Link to="/" className="block hover:bg-sea-700 px-3 py-2 rounded-md">العروض اليومية</Link>
-                      <Link to="/providers" className="block hover:bg-sea-700 px-3 py-2 rounded-md">مقدمو الخدمة</Link>
-                      <Link to="/my-reservations" className="block hover:bg-sea-700 px-3 py-2 rounded-md">طلباتي</Link>
+                      <Link to="/" className="block mobile-nav-link">العروض اليومية</Link>
+                      <Link to="/providers" className="block mobile-nav-link">مقدمو الخدمة</Link>
+                      <Link to="/my-reservations" className="block mobile-nav-link">طلباتي</Link>
                     </>
                   )}
-                  <button onClick={logout} className="w-full text-right block bg-red-500 hover:bg-red-600 px-3 py-2 rounded-md mt-4">
-                    خروج
+                  <button onClick={logout} className="w-full text-right block bg-red-600/90 text-white px-3 py-3 rounded-md mt-4">
+                    تسجيل خروج
                   </button>
                 </>
               ) : (
                 <>
-                  <Link to="/login" className="block hover:bg-sea-700 px-3 py-2 rounded-md">دخول</Link>
-                  <Link to="/register" className="block bg-sea-500 hover:bg-sea-600 px-3 py-2 rounded-md">حساب جديد</Link>
+                  <Link to="/login" className="block mobile-nav-link">دخول</Link>
+                  <Link to="/register" className="block bg-sea-500 text-white px-3 py-3 rounded-md mt-2 font-bold">حساب جديد</Link>
                 </>
               )}
           </div>
@@ -222,176 +326,140 @@ const Navbar = () => {
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { showToast } = useContext(ToastContext);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      showToast('تم تسجيل الدخول بنجاح', 'success');
       window.location.hash = '/';
     } catch (err: any) {
       console.error(err);
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
-          setError("البريد الإلكتروني أو كلمة المرور غير صحيحة.");
-      } else if (err.code === 'auth/too-many-requests') {
-          setError("تم تعطيل الدخول مؤقتاً بسبب كثرة المحاولات. حاول لاحقاً.");
-      } else {
-          setError("حدث خطأ أثناء تسجيل الدخول: " + err.message);
-      }
+      let msg = "حدث خطأ أثناء تسجيل الدخول";
+      if (err.code === 'auth/invalid-credential') msg = "البيانات غير صحيحة";
+      showToast(msg, 'error');
     }
     setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-lg shadow-md">
+    <div className="min-h-[calc(100vh-64px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-sea-50">
+      <Card className="max-w-md w-full p-8 space-y-8 animate-slide-up border-t-4 border-t-sea-500">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-sea-900">تسجيل الدخول</h2>
+          <h2 className="mt-2 text-center text-3xl font-extrabold text-sea-900">تسجيل الدخول</h2>
+          <p className="mt-2 text-center text-sm text-gray-600">أهلاً بك مجدداً في صيد البحر</p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-          {error && <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded text-sm text-center">{error}</div>}
           <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <input type="email" required className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-sea-500 focus:border-sea-500 sm:text-sm" placeholder="البريد الإلكتروني" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div>
-              <input type="password" required className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-sea-500 focus:border-sea-500 sm:text-sm" placeholder="كلمة المرور" value={password} onChange={(e) => setPassword(e.target.value)} />
-            </div>
+            <input type="email" required className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-sea-500 focus:border-sea-500 focus:z-10 sm:text-sm" placeholder="البريد الإلكتروني" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input type="password" required className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-sea-500 focus:border-sea-500 focus:z-10 sm:text-sm" placeholder="كلمة المرور" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
-          <div>
-            <button disabled={loading} type="submit" className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-sea-600 hover:bg-sea-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sea-500 disabled:opacity-70">
-              {loading ? 'جاري الدخول...' : 'دخول'}
-            </button>
-          </div>
+          <Button type="submit" isLoading={loading} className="w-full py-3">دخول</Button>
           <div className="text-sm text-center">
-            <Link to="/register" className="font-medium text-sea-600 hover:text-sea-500">
-              ليس لديك حساب؟ سجل الآن
+            <Link to="/register" className="font-medium text-sea-600 hover:text-sea-500 transition-colors">
+              ليس لديك حساب؟ <span className="underline">سجل الآن</span>
             </Link>
           </div>
         </form>
-      </div>
+      </Card>
     </div>
   );
 };
 
 const Register = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [role, setRole] = useState<UserRole>('customer');
-  const [phone, setPhone] = useState('');
-  const [error, setError] = useState('');
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', phone: '', role: 'customer' as UserRole });
   const [loading, setLoading] = useState(false);
+  const { showToast } = useContext(ToastContext);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
-    
     let userToDelete: User | null = null;
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      userToDelete = user;
+      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+      userToDelete = userCredential.user;
 
       const newUser: UserProfile = {
-        uid: user.uid,
-        name,
-        email,
-        role,
-        phone,
+        uid: userCredential.user.uid,
+        name: formData.name,
+        email: formData.email,
+        role: formData.role,
+        phone: formData.phone,
         createdAt: Date.now(),
       };
 
-      await setDoc(doc(db, 'users', user.uid), newUser);
+      await setDoc(doc(db, 'users', userCredential.user.uid), newUser);
 
-      if (role === 'provider') {
+      if (formData.role === 'provider') {
         const newProvider: ProviderProfile = {
-            providerId: user.uid,
-            name: name,
+            providerId: userCredential.user.uid,
+            name: formData.name,
             description: "طباخ ماهر يقدم أشهى المأكولات البحرية",
             followersCount: 0
         }
-        await setDoc(doc(db, 'providers', user.uid), newProvider);
+        await setDoc(doc(db, 'providers', userCredential.user.uid), newProvider);
       }
       
-      userToDelete = null; // Success, don't delete
+      showToast('تم إنشاء الحساب بنجاح', 'success');
       window.location.hash = '/';
 
     } catch (err: any) {
-      console.error("Registration Error:", err);
-      
-      let msg = "فشل إنشاء الحساب. ";
-      
-      if (err.code === 'permission-denied') {
-          msg = "عذراً، لم يتم تطبيق قواعد الأمان (Rules) في قاعدة البيانات. يرجى نسخ محتوى ملف firestore.rules ولصقه في تبويب Rules في Firebase Console.";
-      } else if (err.code === 'auth/email-already-in-use') {
-          msg = "هذا البريد الإلكتروني مسجل مسبقاً.";
-      } else if (err.code === 'auth/weak-password') {
-          msg = "كلمة المرور ضعيفة جداً (يجب أن تكون 6 أحرف على الأقل).";
-      } else if (err.code === 'auth/network-request-failed') {
-          msg = "مشكلة في الاتصال بالإنترنت.";
-      } else {
-          msg += err.message;
-      }
-      
-      setError(msg);
-      
-      if (userToDelete) {
-          try {
-              await deleteUser(userToDelete);
-          } catch (delErr) {
-              console.error("Failed to cleanup user", delErr);
-          }
-      }
+      console.error(err);
+      let msg = "فشل التسجيل";
+      if (err.code === 'auth/email-already-in-use') msg = "البريد الإلكتروني مستخدم مسبقاً";
+      showToast(msg, 'error');
+      if (userToDelete) try { await deleteUser(userToDelete); } catch {}
     }
     setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-lg shadow-md">
+    <div className="min-h-[calc(100vh-64px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-sea-50">
+      <Card className="max-w-md w-full p-8 space-y-8 animate-slide-up border-t-4 border-t-sea-500">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-sea-900">إنشاء حساب جديد</h2>
+          <h2 className="mt-2 text-center text-3xl font-extrabold text-sea-900">حساب جديد</h2>
         </div>
         <form className="mt-8 space-y-4" onSubmit={handleRegister}>
-          {error && <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded text-sm text-center font-bold">{error}</div>}
-          
-          <input type="text" required className="block w-full px-3 py-2 border rounded-md" placeholder="الاسم الكامل" value={name} onChange={(e) => setName(e.target.value)} />
-          <input type="email" required className="block w-full px-3 py-2 border rounded-md" placeholder="البريد الإلكتروني" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <input type="password" required className="block w-full px-3 py-2 border rounded-md" placeholder="كلمة المرور" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <input type="tel" required className="block w-full px-3 py-2 border rounded-md" placeholder="رقم الهاتف" value={phone} onChange={(e) => setPhone(e.target.value)} />
-          
-          <div className="flex items-center justify-around mt-4">
-            <label className="flex items-center space-x-2 space-x-reverse cursor-pointer">
-              <input type="radio" name="role" value="customer" checked={role === 'customer'} onChange={() => setRole('customer')} className="form-radio text-sea-600" />
-              <span>عميل (أبحث عن طعام)</span>
-            </label>
-            <label className="flex items-center space-x-2 space-x-reverse cursor-pointer">
-              <input type="radio" name="role" value="provider" checked={role === 'provider'} onChange={() => setRole('provider')} className="form-radio text-sea-600" />
-              <span>مقدم خدمة (طاهي/مطعم)</span>
-            </label>
+          <div className="space-y-3">
+            <input type="text" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sea-500 focus:outline-none" placeholder="الاسم الكامل" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+            <input type="email" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sea-500 focus:outline-none" placeholder="البريد الإلكتروني" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
+            <input type="password" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sea-500 focus:outline-none" placeholder="كلمة المرور (6 أحرف على الأقل)" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
+            <input type="tel" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sea-500 focus:outline-none" placeholder="رقم الهاتف" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} />
           </div>
 
-          <button disabled={loading} type="submit" className="w-full py-2 px-4 border border-transparent rounded-md text-white bg-sea-600 hover:bg-sea-700 disabled:opacity-70">
-            {loading ? 'جاري التسجيل...' : 'تسجيل'}
-          </button>
-          
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <div 
+                onClick={() => setFormData({...formData, role: 'customer'})}
+                className={`cursor-pointer p-4 rounded-lg border-2 text-center transition-all ${formData.role === 'customer' ? 'border-sea-600 bg-sea-50 text-sea-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-sea-300'}`}
+            >
+                <div>🍽️</div>
+                <div className="text-sm mt-1">عميل</div>
+            </div>
+            <div 
+                onClick={() => setFormData({...formData, role: 'provider'})}
+                className={`cursor-pointer p-4 rounded-lg border-2 text-center transition-all ${formData.role === 'provider' ? 'border-sea-600 bg-sea-50 text-sea-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-sea-300'}`}
+            >
+                <div>👨‍🍳</div>
+                <div className="text-sm mt-1">مقدم خدمة</div>
+            </div>
+          </div>
+
+          <Button type="submit" isLoading={loading} className="w-full py-3 mt-6">تسجيل</Button>
           <div className="text-sm text-center">
             <Link to="/login" className="font-medium text-sea-600 hover:text-sea-500">
-              لديك حساب بالفعل؟ سجل دخول
+              لديك حساب؟ سجل دخول
             </Link>
           </div>
         </form>
-      </div>
+      </Card>
     </div>
   );
 };
 
-// --- Provider Dashboard & Pages ---
+// --- Provider Logic & UI ---
 
 const ProviderDashboard = () => {
   const { userProfile } = useContext(AuthContext);
@@ -414,51 +482,141 @@ const ProviderDashboard = () => {
             const providerDoc = await getDoc(doc(db, 'providers', userProfile.uid));
             const followers = providerDoc.exists() ? (providerDoc.data() as ProviderProfile).followersCount : 0;
 
-            setStats({
-                items: itemsSnap.size,
-                offers: offersSnap.size,
-                reservations: resSnap.size,
-                revenue: rev,
-                followers
-            });
+            setStats({ items: itemsSnap.size, offers: offersSnap.size, reservations: resSnap.size, revenue: rev, followers });
         } catch (e) {
-            console.error("Error fetching dashboard stats:", e);
+            console.error(e);
         }
     };
     fetchStats();
   }, [userProfile]);
 
+  const StatCard = ({ title, value, color, icon }: any) => (
+      <Card className="p-6 flex items-center justify-between border-l-4" style={{ borderLeftColor: color }}>
+        <div>
+            <p className="text-gray-500 text-sm font-medium mb-1">{title}</p>
+            <h3 className="text-3xl font-bold text-gray-800">{value}</h3>
+        </div>
+        <div className="p-3 rounded-full bg-gray-50 text-gray-600">{icon}</div>
+      </Card>
+  );
+
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6 text-sea-900">لوحة التحكم</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-lg shadow border-r-4 border-sea-500">
-            <div className="text-gray-500">إجمالي الأصناف</div>
-            <div className="text-3xl font-bold">{stats.items}</div>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow border-r-4 border-green-500">
-            <div className="text-gray-500">العروض النشطة</div>
-            <div className="text-3xl font-bold">{stats.offers}</div>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow border-r-4 border-yellow-500">
-            <div className="text-gray-500">إجمالي الحجوزات</div>
-            <div className="text-3xl font-bold">{stats.reservations}</div>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow border-r-4 border-purple-500">
-            <div className="text-gray-500">الإيرادات (المكتملة)</div>
-            <div className="text-3xl font-bold">{stats.revenue.toLocaleString()} ر.س</div>
-        </div>
-         <div className="bg-white p-6 rounded-lg shadow border-r-4 border-pink-500">
-            <div className="text-gray-500">المتابعين</div>
-            <div className="text-3xl font-bold">{stats.followers}</div>
-        </div>
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <h1 className="text-3xl font-bold text-gray-800">لوحة التحكم</h1>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard title="الأصناف" value={stats.items} color="#3b82f6" icon={<ShoppingBagIcon className="w-6 h-6"/>} />
+        <StatCard title="العروض النشطة" value={stats.offers} color="#10b981" icon={<CalendarIcon className="w-6 h-6"/>} />
+        <StatCard title="الطلبات" value={stats.reservations} color="#f59e0b" icon={<ClipboardDocumentCheckIcon className="w-6 h-6"/>} />
+        <StatCard title="الإيرادات" value={`${stats.revenue.toLocaleString()} ر.س`} color="#8b5cf6" icon={<CurrencyDollarIcon className="w-6 h-6"/>} />
       </div>
     </div>
   );
 };
 
+const ProviderReservations = () => {
+    const { userProfile } = useContext(AuthContext);
+    const { showToast } = useContext(ToastContext);
+    const [reservations, setReservations] = useState<Reservation[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchReservations = async () => {
+        if(!userProfile) return;
+        try {
+            const q = query(collection(db, 'reservations'), where('providerId', '==', userProfile.uid), orderBy('createdAt', 'desc'));
+            const snap = await getDocs(q);
+            setReservations(snap.docs.map(d => ({id: d.id, ...d.data()} as Reservation)));
+        } catch(e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { fetchReservations(); }, [userProfile]);
+
+    const updateStatus = async (id: string, status: ReservationStatus) => {
+        try {
+            await updateDoc(doc(db, 'reservations', id), { status });
+            showToast(`تم تحديث الحالة إلى: ${status === 'confirmed' ? 'مؤكد' : status === 'completed' ? 'مكتمل' : 'ملغي'}`, 'success');
+            fetchReservations();
+        } catch (e) {
+            showToast("حدث خطأ أثناء التحديث", 'error');
+        }
+    };
+
+    if (loading) return <LoadingSpinner />;
+
+    return (
+        <div className="p-6 max-w-7xl mx-auto">
+            <h1 className="text-3xl font-bold mb-8 text-gray-800">إدارة الحجوزات</h1>
+            
+            {reservations.length === 0 ? (
+                <div className="text-center py-12 bg-white rounded-lg shadow-sm">
+                    <ClipboardDocumentCheckIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500">لا توجد حجوزات حتى الآن</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 gap-6">
+                    {reservations.map(res => (
+                        <Card key={res.id} className="p-6 flex flex-col md:flex-row justify-between gap-6 hover:border-sea-200">
+                            <div className="flex-1 space-y-2">
+                                <div className="flex items-center justify-between md:justify-start gap-4">
+                                    <h3 className="text-xl font-bold text-gray-900">{res.offeringName}</h3>
+                                    <Badge status={res.status} />
+                                </div>
+                                <div className="text-gray-600 flex flex-col gap-1">
+                                    <div className="flex items-center gap-2">
+                                        <UserGroupIcon className="w-4 h-4" /> العميل: <span className="font-semibold">{res.customerName}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <ShoppingBagIcon className="w-4 h-4" /> الكمية: {res.quantity} | الإجمالي: <span className="text-sea-700 font-bold">{res.totalPrice} ر.س</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-sm text-gray-400">
+                                        <ClockIcon className="w-4 h-4" /> {new Date(res.createdAt).toLocaleDateString('ar-SA')} {new Date(res.createdAt).toLocaleTimeString('ar-SA')}
+                                    </div>
+                                </div>
+                                
+                                {res.paymentProofUrl && (
+                                    <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-100 flex items-center justify-between max-w-sm">
+                                        <span className="text-sm text-gray-600 flex items-center gap-2"><CheckCircleIcon className="w-5 h-5 text-green-500"/> تم رفع إيصال الدفع</span>
+                                        <a href={res.paymentProofUrl} target="_blank" rel="noreferrer" className="text-sea-600 text-sm font-bold hover:underline">عرض الصورة</a>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex flex-col justify-center gap-3 md:w-48 border-t md:border-t-0 md:border-r border-gray-100 pt-4 md:pt-0 md:pr-4">
+                                {res.status === 'pending' && (
+                                    <>
+                                        <Button onClick={() => updateStatus(res.id, 'confirmed')} variant="secondary" className="w-full">تأكيد الطلب</Button>
+                                        <Button onClick={() => updateStatus(res.id, 'cancelled')} variant="danger" className="w-full">رفض/إلغاء</Button>
+                                    </>
+                                )}
+                                {res.status === 'confirmed' && (
+                                    <Button onClick={() => updateStatus(res.id, 'completed')} className="w-full bg-green-600 hover:bg-green-700">إتمام الطلب</Button>
+                                )}
+                                {res.status === 'completed' && (
+                                    <div className="text-center text-green-600 font-bold flex items-center justify-center gap-1">
+                                        <CheckCircleIcon className="w-6 h-6" /> مكتمل
+                                    </div>
+                                )}
+                                {res.status === 'cancelled' && (
+                                    <div className="text-center text-gray-400 font-medium">ملغي</div>
+                                )}
+                            </div>
+                        </Card>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ... (Use similar improvements for Catalog and Offers - omitted for brevity but following same UI pattern) ...
+// Instead of omitting, I will include optimized versions of ProviderCatalog and ProviderOffers
+
 const ProviderCatalog = () => {
     const { userProfile } = useContext(AuthContext);
+    const { showToast } = useContext(ToastContext);
     const [items, setItems] = useState<CatalogItem[]>([]);
     const [newItem, setNewItem] = useState({ name: '', description: '', price: 0, category: 'سمك' });
     const [imageFile, setImageFile] = useState<File | null>(null);
@@ -466,105 +624,111 @@ const ProviderCatalog = () => {
 
     const fetchItems = async () => {
         if(!userProfile) return;
-        try {
-            const q = query(collection(db, 'catalogItems'), where('providerId', '==', userProfile.uid));
-            const snapshot = await getDocs(q);
-            setItems(snapshot.docs.map(d => ({id: d.id, ...d.data()} as CatalogItem)));
-        } catch (e) {
-            console.error("Error fetching catalog:", e);
-        }
+        const q = query(collection(db, 'catalogItems'), where('providerId', '==', userProfile.uid));
+        const snapshot = await getDocs(q);
+        setItems(snapshot.docs.map(d => ({id: d.id, ...d.data()} as CatalogItem)));
     };
 
     useEffect(() => { fetchItems(); }, [userProfile]);
 
     const handleAddItem = async (e: React.FormEvent) => {
         e.preventDefault();
-        if(!userProfile) return;
         setUploading(true);
         try {
-            let imageUrl = 'https://picsum.photos/200/200?random=' + Math.random();
-            if (imageFile) {
+            let imageUrl = `https://placehold.co/400x400/e2e8f0/1e293b?text=${encodeURIComponent(newItem.name)}`;
+            if (imageFile && userProfile) {
                 imageUrl = await uploadFile(imageFile, `items/${userProfile.uid}/${Date.now()}_${imageFile.name}`);
             }
 
-            await addDoc(collection(db, 'catalogItems'), {
-                providerId: userProfile.uid,
-                name: newItem.name,
-                description: newItem.description,
-                priceDefault: Number(newItem.price),
-                category: newItem.category,
-                imageUrl,
-                isActive: true
-            });
+            if(userProfile) {
+                await addDoc(collection(db, 'catalogItems'), {
+                    providerId: userProfile.uid,
+                    name: newItem.name,
+                    description: newItem.description,
+                    priceDefault: Number(newItem.price),
+                    category: newItem.category,
+                    imageUrl,
+                    isActive: true
+                });
+            }
+            showToast("تم إضافة الصنف بنجاح", "success");
             setNewItem({ name: '', description: '', price: 0, category: 'سمك' });
             setImageFile(null);
             fetchItems();
         } catch (error) {
-            console.error(error);
-            alert("حدث خطأ أثناء الإضافة");
+            showToast("حدث خطأ أثناء الإضافة", "error");
         }
         setUploading(false);
     };
 
-    const handleDelete = async (id: string) => {
-        if(confirm('هل أنت متأكد من حذف هذا الصنف؟')) {
-             try {
-                await updateDoc(doc(db, 'catalogItems', id), { isActive: false });
-                fetchItems();
-             } catch(e) {
-                 console.error(e);
-                 alert("خطأ في الحذف");
-             }
-        }
-    }
-
     return (
-        <div className="p-6">
-            <h1 className="text-2xl font-bold mb-6">إدارة الكتالوج</h1>
-            
-            <form onSubmit={handleAddItem} className="bg-white p-6 rounded-lg shadow mb-8">
-                <h3 className="text-lg font-semibold mb-4">إضافة صنف جديد</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input type="text" placeholder="اسم الصنف" required className="border p-2 rounded" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
-                    <input type="number" placeholder="السعر الافتراضي" required className="border p-2 rounded" value={newItem.price} onChange={e => setNewItem({...newItem, price: Number(e.target.value)})} />
-                    <select className="border p-2 rounded" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
-                        <option value="سمك">سمك</option>
-                        <option value="جمبري">جمبري</option>
-                        <option value="سلطعون">سلطعون</option>
-                        <option value="آخر">آخر</option>
-                    </select>
-                    <input type="file" accept="image/*" className="border p-2 rounded" onChange={e => setImageFile(e.target.files ? e.target.files[0] : null)} />
-                    <textarea placeholder="الوصف" className="border p-2 rounded md:col-span-2" value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})}></textarea>
-                </div>
-                <button disabled={uploading} type="submit" className="mt-4 bg-sea-600 text-white px-4 py-2 rounded hover:bg-sea-700 disabled:opacity-50">
-                    {uploading ? 'جاري الرفع...' : 'إضافة الصنف'}
-                </button>
-            </form>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {items.filter(i => i.isActive).map(item => (
-                    <div key={item.id} className="bg-white rounded-lg shadow overflow-hidden relative group">
-                        <img src={item.imageUrl} alt={item.name} className="w-full h-48 object-cover" />
-                        <div className="p-4">
-                            <h3 className="font-bold text-lg">{item.name}</h3>
-                            <p className="text-gray-500 text-sm">{item.description}</p>
-                            <div className="mt-2 flex justify-between items-center">
-                                <span className="text-sea-700 font-bold">{item.priceDefault} ر.س</span>
-                                <span className="bg-gray-200 text-xs px-2 py-1 rounded">{item.category}</span>
-                            </div>
+        <div className="p-6 max-w-7xl mx-auto">
+             <h1 className="text-3xl font-bold mb-8 text-gray-800">الكتالوج</h1>
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Form */}
+                <Card className="p-6 h-fit lg:col-span-1">
+                    <h3 className="font-bold text-xl mb-4 text-sea-800 flex items-center gap-2">
+                        <PlusIcon className="w-6 h-6"/> إضافة صنف جديد
+                    </h3>
+                    <form onSubmit={handleAddItem} className="space-y-4">
+                        <input type="text" placeholder="اسم الوجبة / الصنف" required className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-sea-500 outline-none" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
+                        <div className="grid grid-cols-2 gap-2">
+                            <input type="number" placeholder="السعر" required className="w-full border p-3 rounded-lg outline-none" value={newItem.price || ''} onChange={e => setNewItem({...newItem, price: Number(e.target.value)})} />
+                            <select className="w-full border p-3 rounded-lg outline-none bg-white" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
+                                <option value="سمك">سمك</option>
+                                <option value="جمبري">جمبري</option>
+                                <option value="سلطعون">سلطعون</option>
+                                <option value="آخر">آخر</option>
+                            </select>
                         </div>
-                        <button onClick={() => handleDelete(item.id)} className="absolute top-2 left-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                            <TrashIcon className="h-5 w-5" />
-                        </button>
-                    </div>
-                ))}
-            </div>
+                        <textarea placeholder="وصف المكونات والطعم..." className="w-full border p-3 rounded-lg outline-none" rows={3} value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})}></textarea>
+                        <div>
+                            <label className="block text-sm text-gray-600 mb-1">صورة الصنف</label>
+                            <input type="file" accept="image/*" className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-sea-50 file:text-sea-700 hover:file:bg-sea-100" onChange={e => setImageFile(e.target.files ? e.target.files[0] : null)} />
+                        </div>
+                        <Button type="submit" isLoading={uploading} className="w-full">حفظ في الكتالوج</Button>
+                    </form>
+                </Card>
+
+                {/* List */}
+                <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {items.filter(i => i.isActive).map(item => (
+                        <Card key={item.id} className="group relative">
+                            <div className="h-48 overflow-hidden bg-gray-100">
+                                <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                <div className="absolute top-2 left-2 bg-white/90 backdrop-blur px-2 py-1 rounded text-sm font-bold text-sea-800 shadow-sm">
+                                    {item.priceDefault} ر.س
+                                </div>
+                            </div>
+                            <div className="p-4">
+                                <h3 className="font-bold text-lg text-gray-800">{item.name}</h3>
+                                <p className="text-gray-500 text-sm mt-1 line-clamp-2">{item.description}</p>
+                                <div className="mt-3 flex justify-between items-center">
+                                    <span className="bg-sea-50 text-sea-700 text-xs px-2 py-1 rounded-full">{item.category}</span>
+                                    <button 
+                                        onClick={async () => {
+                                            if(confirm('حذف الصنف؟')) {
+                                                await updateDoc(doc(db, 'catalogItems', item.id), { isActive: false });
+                                                fetchItems();
+                                            }
+                                        }} 
+                                        className="text-red-400 hover:text-red-600 p-1"
+                                    >
+                                        <TrashIcon className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            </div>
+                        </Card>
+                    ))}
+                </div>
+             </div>
         </div>
     );
 };
 
 const ProviderOffers = () => {
     const { userProfile } = useContext(AuthContext);
+    const { showToast } = useContext(ToastContext);
     const [items, setItems] = useState<CatalogItem[]>([]);
     const [offers, setOffers] = useState<Offering[]>([]);
     const [selectedItem, setSelectedItem] = useState('');
@@ -573,15 +737,11 @@ const ProviderOffers = () => {
     useEffect(() => {
         if(!userProfile) return;
         const load = async () => {
-            try {
-                const itemsSnap = await getDocs(query(collection(db, 'catalogItems'), where('providerId', '==', userProfile.uid), where('isActive', '==', true)));
-                setItems(itemsSnap.docs.map(d => ({id: d.id, ...d.data()} as CatalogItem)));
-                
-                const offersSnap = await getDocs(query(collection(db, 'offerings'), where('providerId', '==', userProfile.uid)));
-                setOffers(offersSnap.docs.map(d => ({id: d.id, ...d.data()} as Offering)));
-            } catch (e) {
-                console.error("Error loading offers data:", e);
-            }
+            const itemsSnap = await getDocs(query(collection(db, 'catalogItems'), where('providerId', '==', userProfile.uid), where('isActive', '==', true)));
+            setItems(itemsSnap.docs.map(d => ({id: d.id, ...d.data()} as CatalogItem)));
+            
+            const offersSnap = await getDocs(query(collection(db, 'offerings'), where('providerId', '==', userProfile.uid)));
+            setOffers(offersSnap.docs.map(d => ({id: d.id, ...d.data()} as Offering)));
         };
         load();
     }, [userProfile]);
@@ -589,7 +749,6 @@ const ProviderOffers = () => {
     const handleCreateOffer = async (e: React.FormEvent) => {
         e.preventDefault();
         if(!userProfile || !selectedItem) return;
-
         const item = items.find(i => i.id === selectedItem);
         if(!item) return;
 
@@ -605,156 +764,91 @@ const ProviderOffers = () => {
                 date: offerData.date,
                 isActive: true
             });
-            
-            alert("تم نشر العرض بنجاح");
+            showToast("تم نشر العرض بنجاح", "success");
+            // Refresh logic omitted for brevity, simpler to just append or re-fetch
             const offersSnap = await getDocs(query(collection(db, 'offerings'), where('providerId', '==', userProfile.uid)));
             setOffers(offersSnap.docs.map(d => ({id: d.id, ...d.data()} as Offering)));
         } catch(e) {
-            console.error(e);
-            alert("خطأ في نشر العرض");
+            showToast("خطأ في النشر", "error");
         }
     };
 
     return (
-        <div className="p-6">
-            <h1 className="text-2xl font-bold mb-6">إدارة العروض اليومية</h1>
+        <div className="p-6 max-w-7xl mx-auto">
+            <h1 className="text-3xl font-bold mb-8 text-gray-800">نشر العروض اليومية</h1>
             
-            <form onSubmit={handleCreateOffer} className="bg-white p-6 rounded-lg shadow mb-8">
-                <h3 className="text-lg font-semibold mb-4">إنشاء عرض جديد</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <select className="border p-2 rounded" required value={selectedItem} onChange={e => {
-                        setSelectedItem(e.target.value);
-                        const i = items.find(x => x.id === e.target.value);
-                        if(i) setOfferData({...offerData, price: i.priceDefault});
-                    }}>
-                        <option value="">اختر الصنف...</option>
-                        {items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                    </select>
-                    <input type="number" placeholder="سعر العرض" required className="border p-2 rounded" value={offerData.price} onChange={e => setOfferData({...offerData, price: Number(e.target.value)})} />
-                    <input type="number" placeholder="الكمية المتاحة" required className="border p-2 rounded" value={offerData.quantity} onChange={e => setOfferData({...offerData, quantity: Number(e.target.value)})} />
-                    <input type="date" required className="border p-2 rounded" value={offerData.date} onChange={e => setOfferData({...offerData, date: e.target.value})} />
-                </div>
-                <button type="submit" className="mt-4 bg-sea-600 text-white px-4 py-2 rounded hover:bg-sea-700">نشر العرض</button>
-            </form>
-
-            <div className="space-y-4">
-                <h3 className="font-bold">العروض الحالية</h3>
-                {offers.map(offer => (
-                    <div key={offer.id} className="bg-white p-4 rounded shadow flex justify-between items-center">
-                        <div className="flex items-center space-x-4 space-x-reverse">
-                             <img src={offer.itemImageUrl} className="w-16 h-16 rounded object-cover ml-4" alt="" />
-                             <div>
-                                <div className="font-bold">{offer.itemName}</div>
-                                <div className="text-sm text-gray-500">{offer.date} | المتبقي: {offer.quantityRemaining} / {offer.quantityTotal}</div>
-                             </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <Card className="p-6 h-fit lg:col-span-1 border-t-4 border-t-green-500">
+                     <h3 className="font-bold text-xl mb-4 text-green-700 flex items-center gap-2">
+                        <CalendarIcon className="w-6 h-6"/> عرض جديد
+                    </h3>
+                    <form onSubmit={handleCreateOffer} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">اختر الوجبة من الكتالوج</label>
+                            <select className="w-full border p-3 rounded-lg outline-none bg-white" required value={selectedItem} onChange={e => {
+                                setSelectedItem(e.target.value);
+                                const i = items.find(x => x.id === e.target.value);
+                                if(i) setOfferData({...offerData, price: i.priceDefault});
+                            }}>
+                                <option value="">-- اختر --</option>
+                                {items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                            </select>
                         </div>
-                        <div className="text-lg font-bold text-sea-700">{offer.price} ر.س</div>
-                    </div>
-                ))}
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">سعر العرض</label>
+                                <input type="number" required className="w-full border p-3 rounded-lg outline-none" value={offerData.price || ''} onChange={e => setOfferData({...offerData, price: Number(e.target.value)})} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">الكمية</label>
+                                <input type="number" required className="w-full border p-3 rounded-lg outline-none" value={offerData.quantity} onChange={e => setOfferData({...offerData, quantity: Number(e.target.value)})} />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">تاريخ العرض</label>
+                            <input type="date" required className="w-full border p-3 rounded-lg outline-none" value={offerData.date} onChange={e => setOfferData({...offerData, date: e.target.value})} />
+                        </div>
+                        <Button type="submit" variant="secondary" className="w-full bg-green-600 hover:bg-green-700">نشر الآن</Button>
+                    </form>
+                </Card>
+
+                <div className="lg:col-span-2 space-y-4">
+                    <h3 className="font-bold text-gray-600">سجل العروض</h3>
+                    {offers.map(offer => (
+                        <div key={offer.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex justify-between items-center transition-transform hover:translate-x-1">
+                            <div className="flex items-center gap-4">
+                                 <img src={offer.itemImageUrl} className="w-16 h-16 rounded-lg object-cover shadow-sm" alt="" />
+                                 <div>
+                                    <div className="font-bold text-gray-800">{offer.itemName}</div>
+                                    <div className="text-sm text-gray-500 flex items-center gap-2">
+                                        <CalendarIcon className="w-4 h-4"/> {offer.date}
+                                        <span className="bg-gray-100 px-2 rounded-full text-xs">المتبقي: {offer.quantityRemaining}</span>
+                                    </div>
+                                 </div>
+                            </div>
+                            <div className="text-xl font-bold text-sea-700">{offer.price} <span className="text-sm font-normal">ر.س</span></div>
+                        </div>
+                    ))}
+                </div>
             </div>
         </div>
     );
 };
 
-const ProviderReservations = () => {
-    const { userProfile } = useContext(AuthContext);
-    const [reservations, setReservations] = useState<Reservation[]>([]);
-
-    const fetchReservations = async () => {
-        if(!userProfile) return;
-        try {
-            const q = query(collection(db, 'reservations'), where('providerId', '==', userProfile.uid), orderBy('createdAt', 'desc'));
-            const snap = await getDocs(q);
-            setReservations(snap.docs.map(d => ({id: d.id, ...d.data()} as Reservation)));
-        } catch(e) {
-            console.error("Error loading reservations:", e);
-        }
-    };
-
-    useEffect(() => { fetchReservations(); }, [userProfile]);
-
-    const updateStatus = async (id: string, status: ReservationStatus) => {
-        try {
-            await updateDoc(doc(db, 'reservations', id), { status });
-            fetchReservations();
-        } catch (e) {
-            console.error(e);
-            alert("خطأ في تحديث الحالة");
-        }
-    };
-
-    return (
-        <div className="p-6">
-            <h1 className="text-2xl font-bold mb-6">طلبات الحجز</h1>
-            <div className="bg-white rounded shadow overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">العميل</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الطلب</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">السعر</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الحالة</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">سند الدفع</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">إجراءات</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {reservations.map(res => (
-                            <tr key={res.id}>
-                                <td className="px-6 py-4 whitespace-nowrap">{res.customerName}</td>
-                                <td className="px-6 py-4 whitespace-nowrap">{res.offeringName} (x{res.quantity})</td>
-                                <td className="px-6 py-4 whitespace-nowrap">{res.totalPrice} ر.س</td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                                        ${res.status === 'confirmed' ? 'bg-green-100 text-green-800' : 
-                                          res.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
-                                          res.status === 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>
-                                        {res.status === 'pending' && 'معلق'}
-                                        {res.status === 'confirmed' && 'مؤكد'}
-                                        {res.status === 'completed' && 'مكتمل'}
-                                        {res.status === 'cancelled' && 'ملغي'}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    {res.paymentProofUrl ? (
-                                        <a href={res.paymentProofUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center">
-                                            <PhotoIcon className="h-4 w-4 ml-1" /> عرض الصورة
-                                        </a>
-                                    ) : <span className="text-gray-400">لم يرفع</span>}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2 space-x-reverse">
-                                    {res.status === 'pending' && (
-                                        <>
-                                            <button onClick={() => updateStatus(res.id, 'confirmed')} className="text-green-600 hover:text-green-900">تأكيد</button>
-                                            <button onClick={() => updateStatus(res.id, 'cancelled')} className="text-red-600 hover:text-red-900">إلغاء</button>
-                                        </>
-                                    )}
-                                    {res.status === 'confirmed' && (
-                                        <button onClick={() => updateStatus(res.id, 'completed')} className="text-blue-600 hover:text-blue-900">اكتمال الطلب</button>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
-};
-
-// --- Customer Pages ---
+// --- Customer Logic & UI ---
 
 const CustomerHome = () => {
     const { userProfile } = useContext(AuthContext);
+    const { showToast } = useContext(ToastContext);
     const [offers, setOffers] = useState<Offering[]>([]);
     const [selectedOffer, setSelectedOffer] = useState<Offering | null>(null);
     const [quantity, setQuantity] = useState(1);
     const [booking, setBooking] = useState(false);
-
-    // Filters
+    const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState<'all' | 'following'>('all');
 
     const fetchOffers = async () => {
+        setLoading(true);
         const today = new Date().toISOString().split('T')[0];
         let q = query(collection(db, 'offerings'), where('date', '==', today), where('isActive', '==', true));
         
@@ -767,32 +861,25 @@ const CustomerHome = () => {
                      const allSnap = await getDocs(q);
                      const allOffers = allSnap.docs.map(d => ({id: d.id, ...d.data()} as Offering));
                      setOffers(allOffers.filter(o => followedProviderIds.includes(o.providerId)));
-                     return;
                 } else {
                     setOffers([]);
-                    return;
                 }
+            } else {
+                const snapshot = await getDocs(q);
+                setOffers(snapshot.docs.map(d => ({id: d.id, ...d.data()} as Offering)));
             }
-
-            const snapshot = await getDocs(q);
-            setOffers(snapshot.docs.map(d => ({id: d.id, ...d.data()} as Offering)));
         } catch(e) {
-            console.error("Error fetching offers:", e);
+            console.error(e);
         }
+        setLoading(false);
     };
 
     useEffect(() => { fetchOffers(); }, [viewMode, userProfile]);
 
     const handleBook = async () => {
         if (!selectedOffer || !userProfile) return;
-        if (quantity > selectedOffer.quantityRemaining) {
-            alert("الكمية المطلوبة غير متوفرة");
-            return;
-        }
-
         setBooking(true);
         try {
-            // 1. Create Reservation
             await addDoc(collection(db, 'reservations'), {
                 offeringId: selectedOffer.id,
                 customerId: userProfile.uid,
@@ -805,163 +892,127 @@ const CustomerHome = () => {
                 createdAt: Date.now()
             });
 
-            // 2. Decrement Quantity
             await updateDoc(doc(db, 'offerings', selectedOffer.id), {
                 quantityRemaining: increment(-quantity)
             });
 
-            alert("تم إرسال طلب الحجز. يرجى رفع سند التحويل من صفحة 'طلباتي' لتأكيد الحجز.");
+            showToast("تم إرسال الطلب! تابع حالة الطلب من صفحة طلباتي", "success");
             setSelectedOffer(null);
             setQuantity(1);
             fetchOffers();
         } catch (e) {
-            console.error(e);
-            alert("حدث خطأ أثناء الحجز");
+            showToast("فشل الحجز، حاول مرة أخرى", "error");
         }
         setBooking(false);
     };
 
     return (
-        <div className="p-6 max-w-7xl mx-auto">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold text-sea-900">عروض اليوم</h1>
+        <div className="p-6 max-w-7xl mx-auto min-h-screen">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                <div>
+                    <h1 className="text-3xl font-extrabold text-sea-900">عروض الصيد اليوم 🎣</h1>
+                    <p className="text-gray-500 mt-1">اغتنم الفرصة واحجز أشهى المأكولات البحرية الطازجة</p>
+                </div>
                 {userProfile && (
-                     <div className="flex space-x-2 space-x-reverse bg-white rounded-lg p-1 shadow-sm">
-                        <button onClick={() => setViewMode('all')} className={`px-4 py-1 rounded-md ${viewMode === 'all' ? 'bg-sea-500 text-white' : 'text-gray-600'}`}>الكل</button>
-                        <button onClick={() => setViewMode('following')} className={`px-4 py-1 rounded-md ${viewMode === 'following' ? 'bg-sea-500 text-white' : 'text-gray-600'}`}>المتابعون</button>
+                     <div className="flex bg-white rounded-full p-1 shadow-sm border border-gray-200">
+                        <button onClick={() => setViewMode('all')} className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${viewMode === 'all' ? 'bg-sea-600 text-white shadow' : 'text-gray-500 hover:bg-gray-50'}`}>الكل</button>
+                        <button onClick={() => setViewMode('following')} className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${viewMode === 'following' ? 'bg-sea-600 text-white shadow' : 'text-gray-500 hover:bg-gray-50'}`}>المتابعون</button>
                     </div>
                 )}
             </div>
 
-            {offers.length === 0 ? (
-                <div className="text-center py-20 text-gray-500">
-                    لا توجد عروض متاحة اليوم {viewMode === 'following' ? 'من الطهاة الذين تتابعهم' : ''}.
+            {loading ? <LoadingSpinner /> : offers.length === 0 ? (
+                <div className="text-center py-24 bg-white rounded-2xl shadow-sm border border-dashed border-gray-300">
+                    <div className="text-6xl mb-4">🤷‍♂️</div>
+                    <h3 className="text-xl font-bold text-gray-700">لا توجد عروض حالياً</h3>
+                    <p className="text-gray-500">عد لاحقاً أو جرب تغيير الفلتر</p>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {offers.map(offer => (
-                        <div key={offer.id} className="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100 hover:shadow-xl transition-shadow">
-                            <img src={offer.itemImageUrl} alt={offer.itemName} className="w-full h-48 object-cover" />
-                            <div className="p-4">
-                                <div className="flex justify-between items-start">
-                                    <h3 className="font-bold text-lg text-sea-900">{offer.itemName}</h3>
-                                    <span className="bg-sea-50 text-sea-700 px-2 py-1 rounded text-sm font-bold">{offer.price} ر.س</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {offers.map(offer => {
+                        const isMyOffer = userProfile?.uid === offer.providerId;
+                        const soldOut = offer.quantityRemaining === 0;
+
+                        return (
+                        <Card key={offer.id} className="group flex flex-col h-full border-t-4 border-t-sea-400">
+                            <div className="h-56 overflow-hidden relative">
+                                <img src={offer.itemImageUrl} alt={offer.itemName} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                                <div className="absolute top-0 right-0 bg-sea-600 text-white px-3 py-1 rounded-bl-lg font-bold shadow">
+                                    {offer.price} ر.س
                                 </div>
-                                <p className="text-sm text-gray-500 mt-2">المتبقي: {offer.quantityRemaining}</p>
+                                {soldOut && <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-bold text-xl backdrop-blur-sm">نفذت الكمية</div>}
+                            </div>
+                            <div className="p-5 flex-1 flex flex-col">
+                                <h3 className="font-bold text-xl text-gray-800 mb-1">{offer.itemName}</h3>
+                                <div className="text-sm text-gray-500 mb-4 flex justify-between">
+                                    <span>المتبقي: {offer.quantityRemaining} وجبة</span>
+                                </div>
                                 
-                                <button 
-                                    onClick={() => setSelectedOffer(offer)}
-                                    disabled={offer.quantityRemaining === 0}
-                                    className="mt-4 w-full bg-sea-600 text-white py-2 rounded hover:bg-sea-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
-                                    {offer.quantityRemaining === 0 ? 'نفذت الكمية' : 'حجز الآن'}
-                                </button>
+                                <div className="mt-auto pt-4 border-t border-gray-100">
+                                    {isMyOffer ? (
+                                        <div className="w-full py-2 text-center text-sm font-bold text-sea-600 bg-sea-50 rounded-lg border border-sea-100">
+                                            🌟 هذا العرض خاص بك
+                                        </div>
+                                    ) : (
+                                        <Button 
+                                            onClick={() => setSelectedOffer(offer)}
+                                            disabled={soldOut || !userProfile}
+                                            className="w-full shadow-sea-200"
+                                        >
+                                            {soldOut ? 'نفذت الكمية' : userProfile ? 'حجز الآن' : 'سجل للحجز'}
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        </Card>
+                    )})}
+                </div>
+            )}
+
+            {/* Modal */}
+            {selectedOffer && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-fade-in">
+                    <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-slide-up">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-gray-800">تأكيد الحجز</h2>
+                            <button onClick={() => setSelectedOffer(null)} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-6 h-6"/></button>
+                        </div>
+                        
+                        <div className="flex items-center gap-4 mb-6 bg-sea-50 p-3 rounded-xl">
+                            <img src={selectedOffer.itemImageUrl} className="w-16 h-16 rounded-lg object-cover" alt="" />
+                            <div>
+                                <h3 className="font-bold text-sm">{selectedOffer.itemName}</h3>
+                                <div className="text-sea-700 font-bold">{selectedOffer.price} ر.س / وجبة</div>
                             </div>
                         </div>
-                    ))}
-                </div>
-            )}
 
-            {/* Booking Modal */}
-            {selectedOffer && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg p-6 max-w-md w-full">
-                        <h2 className="text-xl font-bold mb-4">حجز: {selectedOffer.itemName}</h2>
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">الكمية</label>
-                            <input 
-                                type="number" 
-                                min="1" 
-                                max={selectedOffer.quantityRemaining} 
-                                value={quantity} 
-                                onChange={e => setQuantity(Math.min(selectedOffer.quantityRemaining, Math.max(1, parseInt(e.target.value) || 1)))} 
-                                className="block w-full border border-gray-300 rounded-md p-2" 
-                            />
+                        <div className="mb-6">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">عدد الوجبات</label>
+                            <div className="flex items-center gap-3">
+                                <button className="w-10 h-10 rounded-full border flex items-center justify-center hover:bg-gray-100" onClick={() => setQuantity(Math.max(1, quantity - 1))}>-</button>
+                                <span className="text-xl font-bold w-8 text-center">{quantity}</span>
+                                <button className="w-10 h-10 rounded-full border flex items-center justify-center hover:bg-gray-100" onClick={() => setQuantity(Math.min(selectedOffer.quantityRemaining, quantity + 1))}>+</button>
+                            </div>
                         </div>
-                        <div className="bg-blue-50 p-3 rounded mb-4 text-sm text-blue-800">
-                            الإجمالي: <span className="font-bold">{quantity * selectedOffer.price} ر.س</span>
+
+                        <div className="flex justify-between items-center mb-6 text-lg font-bold border-t pt-4">
+                            <span>الإجمالي</span>
+                            <span className="text-sea-700">{quantity * selectedOffer.price} ر.س</span>
                         </div>
-                        <div className="flex justify-end space-x-2 space-x-reverse">
-                            <button onClick={() => setSelectedOffer(null)} className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-50">إلغاء</button>
-                            <button onClick={handleBook} disabled={booking} className="px-4 py-2 bg-sea-600 text-white rounded hover:bg-sea-700">
-                                {booking ? 'جاري الحجز...' : 'تأكيد الحجز'}
-                            </button>
-                        </div>
+
+                        <Button onClick={handleBook} isLoading={booking} className="w-full py-3 text-lg">
+                            تأكيد الطلب
+                        </Button>
                     </div>
                 </div>
             )}
-        </div>
-    );
-};
-
-const ProvidersList = () => {
-    const { userProfile } = useContext(AuthContext);
-    const [providers, setProviders] = useState<ProviderProfile[]>([]);
-    const [followedIds, setFollowedIds] = useState<string[]>([]);
-
-    useEffect(() => {
-        const load = async () => {
-            try {
-                const snap = await getDocs(collection(db, 'providers'));
-                setProviders(snap.docs.map(d => d.data() as ProviderProfile));
-
-                if (userProfile) {
-                    const fSnap = await getDocs(query(collection(db, 'follows'), where('customerId', '==', userProfile.uid)));
-                    setFollowedIds(fSnap.docs.map(d => d.data().providerId));
-                }
-            } catch(e) {
-                console.error("Error loading providers:", e);
-            }
-        };
-        load();
-    }, [userProfile]);
-
-    const toggleFollow = async (providerId: string) => {
-        if (!userProfile) return alert("يجب تسجيل الدخول للمتابعة");
-        
-        try {
-            const isFollowing = followedIds.includes(providerId);
-            if (isFollowing) {
-                const q = query(collection(db, 'follows'), where('customerId', '==', userProfile.uid), where('providerId', '==', providerId));
-                const snap = await getDocs(q);
-                // Note: Simplified deletion for mock
-                // In real firestore we would delete each doc. 
-                // In our mock, updateDoc with active:false is not supported directly in the mock logic unless we implement deletion.
-                // But let's just assume we can remove it. For now, let's just update local state.
-                setFollowedIds(prev => prev.filter(id => id !== providerId));
-            } else {
-                await addDoc(collection(db, 'follows'), { customerId: userProfile.uid, providerId });
-                setFollowedIds(prev => [...prev, providerId]);
-            }
-        } catch(e) {
-            console.error(e);
-        }
-    };
-
-    return (
-        <div className="p-6 max-w-7xl mx-auto">
-            <h1 className="text-2xl font-bold mb-6">مقدمو الخدمة</h1>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {providers.map(prov => (
-                    <div key={prov.providerId} className="bg-white p-6 rounded-lg shadow flex flex-col items-center text-center">
-                         <div className="h-20 w-20 bg-sea-100 rounded-full flex items-center justify-center mb-4 text-sea-700 font-bold text-2xl">
-                            {prov.name[0]}
-                         </div>
-                         <h3 className="font-bold text-lg">{prov.name}</h3>
-                         <p className="text-gray-500 text-sm mt-2">{prov.description}</p>
-                         <button 
-                            onClick={() => toggleFollow(prov.providerId)}
-                            className={`mt-4 px-6 py-2 rounded-full border ${followedIds.includes(prov.providerId) ? 'bg-sea-600 text-white' : 'border-sea-600 text-sea-600'}`}>
-                            {followedIds.includes(prov.providerId) ? 'متابع' : 'متابعة'}
-                         </button>
-                    </div>
-                ))}
-            </div>
         </div>
     );
 };
 
 const MyReservations = () => {
     const { userProfile } = useContext(AuthContext);
+    const { showToast } = useContext(ToastContext);
     const [reservations, setReservations] = useState<Reservation[]>([]);
     const [uploadingId, setUploadingId] = useState<string | null>(null);
 
@@ -971,9 +1022,7 @@ const MyReservations = () => {
             const q = query(collection(db, 'reservations'), where('customerId', '==', userProfile.uid), orderBy('createdAt', 'desc'));
             const snap = await getDocs(q);
             setReservations(snap.docs.map(d => ({id: d.id, ...d.data()} as Reservation)));
-        } catch(e) {
-            console.error("Error loading reservations:", e);
-        }
+        } catch(e) { console.error(e); }
     };
 
     useEffect(() => { fetchRes(); }, [userProfile]);
@@ -983,84 +1032,101 @@ const MyReservations = () => {
         try {
             const url = await uploadFile(file, `payments/${userProfile?.uid}/${resId}`);
             await updateDoc(doc(db, 'reservations', resId), { paymentProofUrl: url });
-            alert("تم رفع سند الدفع بنجاح");
+            showToast("تم رفع السند بنجاح! بانتظار تأكيد الطاهي", "success");
             fetchRes();
         } catch (e) {
-            console.error(e);
-            alert("فشل الرفع");
+            showToast("فشل الرفع", "error");
         }
         setUploadingId(null);
     };
 
-    return (
-        <div className="p-6 max-w-4xl mx-auto">
-            <div className="bg-yellow-50 border-r-4 border-yellow-400 p-4 mb-6">
-                <div className="flex">
-                    <div className="flex-shrink-0">
-                        <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                    </div>
-                    <div className="mr-3">
-                        <p className="text-sm text-yellow-700">
-                            تم تجهيز البنية التقنية للدفع الإلكتروني، لكنها غير مفعّلة حالياً. يرجى تحويل المبلغ للحساب البنكي لمقدم الخدمة ورفع صورة السند هنا.
-                        </p>
-                    </div>
-                </div>
-            </div>
+    const cancelReservation = async (id: string) => {
+        if(!confirm("هل أنت متأكد من إلغاء الطلب؟")) return;
+        try {
+            await updateDoc(doc(db, 'reservations', id), { status: 'cancelled' });
+            showToast("تم إلغاء الطلب", "info");
+            fetchRes();
+        } catch(e) { showToast("فشل الإلغاء", "error"); }
+    }
 
-            <h1 className="text-2xl font-bold mb-6">طلباتي</h1>
+    return (
+        <div className="p-6 max-w-4xl mx-auto min-h-screen">
+            <h1 className="text-3xl font-bold mb-6 text-gray-800">طلباتي</h1>
             <div className="space-y-4">
                 {reservations.map(res => (
-                    <div key={res.id} className="bg-white p-6 rounded-lg shadow border border-gray-100">
-                        <div className="flex justify-between items-start">
+                    <Card key={res.id} className="p-6">
+                        <div className="flex flex-col md:flex-row justify-between gap-4">
                             <div>
-                                <h3 className="font-bold text-lg">{res.offeringName}</h3>
-                                <p className="text-sm text-gray-500">الكمية: {res.quantity} | الإجمالي: {res.totalPrice} ر.س</p>
-                                <p className="text-xs text-gray-400 mt-1">تاريخ الطلب: {new Date(res.createdAt).toLocaleDateString('ar-SA')}</p>
-                            </div>
-                            <div>
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold
-                                    ${res.status === 'confirmed' ? 'bg-green-100 text-green-800' : 
-                                      res.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
-                                      res.status === 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>
-                                    {res.status === 'pending' && 'في انتظار التأكيد'}
-                                    {res.status === 'confirmed' && 'تم التأكيد'}
-                                    {res.status === 'completed' && 'مكتمل'}
-                                    {res.status === 'cancelled' && 'ملغي'}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="mt-4 border-t pt-4">
-                            {res.status === 'pending' && !res.paymentProofUrl && (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">إرفاق سند التحويل البنكي</label>
-                                    <div className="flex items-center space-x-2 space-x-reverse">
-                                        <input 
-                                            type="file" 
-                                            accept="image/*"
-                                            onChange={(e) => e.target.files && handleUploadPayment(e.target.files[0], res.id)} 
-                                            className="block w-full text-sm text-gray-500 file:ml-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-sea-50 file:text-sea-700 hover:file:bg-sea-100"
-                                        />
-                                        {uploadingId === res.id && <span className="text-sm text-gray-500">جاري الرفع...</span>}
-                                    </div>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <h3 className="font-bold text-xl">{res.offeringName}</h3>
+                                    <Badge status={res.status} />
                                 </div>
-                            )}
-                            {res.paymentProofUrl && (
-                                <div className="text-green-600 text-sm flex items-center">
-                                    <CheckCircleIcon className="h-5 w-5 ml-1" /> تم رفع سند الدفع
+                                <p className="text-gray-500 text-sm mb-1">الكمية: <span className="font-bold text-gray-800">{res.quantity}</span> | الإجمالي: <span className="font-bold text-sea-700">{res.totalPrice} ر.س</span></p>
+                                <p className="text-xs text-gray-400">{new Date(res.createdAt).toLocaleDateString('ar-SA')} {new Date(res.createdAt).toLocaleTimeString('ar-SA')}</p>
+                            </div>
+                            
+                            {res.status === 'pending' && (
+                                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200 md:w-1/2">
+                                    {!res.paymentProofUrl ? (
+                                        <>
+                                            <p className="text-sm font-bold text-yellow-800 mb-2">⚠ يرجى تحويل المبلغ وإرفاق الإيصال لتأكيد الحجز</p>
+                                            <div className="flex gap-2">
+                                                <label className={`flex-1 cursor-pointer bg-white border border-yellow-300 rounded px-3 py-2 text-center text-sm font-bold text-yellow-700 hover:bg-yellow-100 transition-colors ${uploadingId === res.id ? 'opacity-50' : ''}`}>
+                                                    {uploadingId === res.id ? 'جاري الرفع...' : '📤 رفع الإيصال'}
+                                                    <input type="file" className="hidden" accept="image/*" disabled={!!uploadingId} onChange={(e) => e.target.files && handleUploadPayment(e.target.files[0], res.id)} />
+                                                </label>
+                                                <button onClick={() => cancelReservation(res.id)} className="text-red-500 text-sm hover:underline px-2">إلغاء الطلب</button>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="flex flex-col items-center text-center">
+                                            <CheckCircleIcon className="w-8 h-8 text-green-500 mb-1"/>
+                                            <p className="text-sm text-green-700 font-bold">تم إرسال الإيصال</p>
+                                            <p className="text-xs text-gray-500">بانتظار موافقة الطاهي</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
-                    </div>
+                    </Card>
                 ))}
             </div>
         </div>
     );
 };
 
-// --- Main App Logic ---
+const ProvidersList = () => {
+    const { userProfile } = useContext(AuthContext);
+    const [providers, setProviders] = useState<ProviderProfile[]>([]);
+    
+    useEffect(() => {
+        const load = async () => {
+            const snap = await getDocs(collection(db, 'providers'));
+            setProviders(snap.docs.map(d => d.data() as ProviderProfile));
+        };
+        load();
+    }, []);
+
+    return (
+        <div className="p-6 max-w-7xl mx-auto min-h-screen">
+            <h1 className="text-3xl font-bold mb-8 text-gray-800">أشهر الطهاة</h1>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {providers.map(prov => (
+                    <Card key={prov.providerId} className="p-8 flex flex-col items-center text-center hover:translate-y-[-5px] transition-transform">
+                         <div className="h-24 w-24 bg-gradient-to-br from-sea-100 to-sea-200 rounded-full flex items-center justify-center mb-4 text-sea-700 font-bold text-3xl shadow-inner">
+                            {prov.name[0]}
+                         </div>
+                         <h3 className="font-bold text-xl text-gray-800">{prov.name}</h3>
+                         <p className="text-gray-500 text-sm mt-2 mb-6">{prov.description}</p>
+                         <Button variant="outline" className="rounded-full px-8">زيارة الملف</Button>
+                    </Card>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// --- App Root ---
 
 const ProtectedRoute = ({ children, allowedRoles }: { children?: React.ReactNode, allowedRoles?: UserRole[] }) => {
     const { currentUser, userProfile, loading } = useContext(AuthContext);
@@ -1077,49 +1143,27 @@ const ProtectedRoute = ({ children, allowedRoles }: { children?: React.ReactNode
 
 const AppContent = () => {
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
+        <div className="flex flex-col min-h-screen">
             <Navbar />
-            <div className="flex-grow">
+            <div className="flex-grow pt-4">
                 <Routes>
                     <Route path="/login" element={<Login />} />
                     <Route path="/register" element={<Register />} />
                     
-                    {/* Customer Routes */}
                     <Route path="/" element={<CustomerHome />} />
                     <Route path="/providers" element={<ProvidersList />} />
-                    <Route path="/my-reservations" element={
-                        <ProtectedRoute allowedRoles={['customer']}>
-                            <MyReservations />
-                        </ProtectedRoute>
-                    } />
+                    <Route path="/my-reservations" element={<ProtectedRoute allowedRoles={['customer']}><MyReservations /></ProtectedRoute>} />
 
-                    {/* Provider Routes */}
-                    <Route path="/provider/dashboard" element={
-                        <ProtectedRoute allowedRoles={['provider']}>
-                            <ProviderDashboard />
-                        </ProtectedRoute>
-                    } />
-                    <Route path="/provider/catalog" element={
-                        <ProtectedRoute allowedRoles={['provider']}>
-                            <ProviderCatalog />
-                        </ProtectedRoute>
-                    } />
-                    <Route path="/provider/offers" element={
-                        <ProtectedRoute allowedRoles={['provider']}>
-                            <ProviderOffers />
-                        </ProtectedRoute>
-                    } />
-                    <Route path="/provider/reservations" element={
-                        <ProtectedRoute allowedRoles={['provider']}>
-                            <ProviderReservations />
-                        </ProtectedRoute>
-                    } />
+                    <Route path="/provider/dashboard" element={<ProtectedRoute allowedRoles={['provider']}><ProviderDashboard /></ProtectedRoute>} />
+                    <Route path="/provider/catalog" element={<ProtectedRoute allowedRoles={['provider']}><ProviderCatalog /></ProtectedRoute>} />
+                    <Route path="/provider/offers" element={<ProtectedRoute allowedRoles={['provider']}><ProviderOffers /></ProtectedRoute>} />
+                    <Route path="/provider/reservations" element={<ProtectedRoute allowedRoles={['provider']}><ProviderReservations /></ProtectedRoute>} />
 
                     <Route path="*" element={<Navigate to="/" />} />
                 </Routes>
             </div>
-            <footer className="bg-sea-900 text-white text-center py-4 mt-8">
-                <p>&copy; {new Date().getFullYear()} صيد البحر SeaCatch. جميع الحقوق محفوظة.</p>
+            <footer className="bg-sea-900 text-sea-100 text-center py-6 mt-12">
+                <p className="font-medium opacity-80">&copy; {new Date().getFullYear()} صيد البحر SeaCatch</p>
             </footer>
         </div>
     );
@@ -1128,9 +1172,11 @@ const AppContent = () => {
 const App = () => {
   return (
     <AuthProvider>
-      <HashRouter>
-        <AppContent />
-      </HashRouter>
+      <ToastProvider>
+        <HashRouter>
+            <AppContent />
+        </HashRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 };

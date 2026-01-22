@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" class="scroll-smooth">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>صيد البحر - SeaCatch</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         theme: {
@@ -17,10 +17,29 @@
               sea: {
                 50: '#f0f9ff',
                 100: '#e0f2fe',
+                200: '#bae6fd',
+                300: '#7dd3fc',
+                400: '#38bdf8',
                 500: '#0ea5e9',
                 600: '#0284c7',
+                700: '#0369a1',
                 800: '#075985',
                 900: '#0c4a6e',
+                950: '#082f49',
+              }
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.3s ease-out',
+              'slide-up': 'slideUp 0.4s ease-out',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              slideUp: {
+                '0%': { transform: 'translateY(20px)', opacity: '0' },
+                '100%': { transform: 'translateY(0)', opacity: '1' },
               }
             }
           }
@@ -31,8 +50,22 @@
       body {
         font-family: 'Cairo', sans-serif;
       }
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f1f1f1; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #0ea5e9; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #0284c7; 
+      }
     </style>
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@^19.2.3",
@@ -46,7 +79,7 @@
 }
 </script>
 </head>
-  <body class="bg-gray-50 text-gray-900">
+  <body class="bg-slate-50 text-slate-800 min-h-screen">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
