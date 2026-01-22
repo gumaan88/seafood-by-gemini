@@ -1,3 +1,6 @@
+// 🔴🔴 هام جداً: انسخ هذا الكود وضعه في Firebase Console -> Firestore Database -> Rules
+// ثم اضغط Publish لتفعيل الحماية والسماح للمستخدمين بالتسجيل
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {

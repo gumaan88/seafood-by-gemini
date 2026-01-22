@@ -223,15 +223,26 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
     try {
       await signInWithEmailAndPassword(auth, email, password);
       window.location.hash = '/';
     } catch (err: any) {
-      setError("فشل تسجيل الدخول. تأكد من البريد وكلمة المرور.");
+      console.error(err);
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+          setError("البريد الإلكتروني أو كلمة المرور غير صحيحة.");
+      } else if (err.code === 'auth/too-many-requests') {
+          setError("تم تعطيل الدخول مؤقتاً بسبب كثرة المحاولات. حاول لاحقاً.");
+      } else {
+          setError("حدث خطأ أثناء تسجيل الدخول: " + err.message);
+      }
     }
+    setLoading(false);
   };
 
   return (
@@ -241,7 +252,7 @@ const Login = () => {
           <h2 className="mt-6 text-center text-3xl font-extrabold text-sea-900">تسجيل الدخول</h2>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-          {error && <div className="text-red-500 text-sm text-center">{error}</div>}
+          {error && <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded text-sm text-center">{error}</div>}
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
               <input type="email" required className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-sea-500 focus:border-sea-500 sm:text-sm" placeholder="البريد الإلكتروني" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -251,8 +262,8 @@ const Login = () => {
             </div>
           </div>
           <div>
-            <button type="submit" className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-sea-600 hover:bg-sea-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sea-500">
-              دخول
+            <button disabled={loading} type="submit" className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-sea-600 hover:bg-sea-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sea-500 disabled:opacity-70">
+              {loading ? 'جاري الدخول...' : 'دخول'}
             </button>
           </div>
           <div className="text-sm text-center">
@@ -273,9 +284,13 @@ const Register = () => {
   const [role, setRole] = useState<UserRole>('customer');
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
+    
     let userToDelete: User | null = null;
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -303,12 +318,27 @@ const Register = () => {
         await setDoc(doc(db, 'providers', user.uid), newProvider);
       }
       
-      userToDelete = null;
+      userToDelete = null; // Success, don't delete
       window.location.hash = '/';
 
     } catch (err: any) {
-      console.error(err);
-      setError("فشل إنشاء الحساب. " + err.message);
+      console.error("Registration Error:", err);
+      
+      let msg = "فشل إنشاء الحساب. ";
+      
+      if (err.code === 'permission-denied') {
+          msg = "عذراً، لم يتم تطبيق قواعد الأمان (Rules) في قاعدة البيانات. يرجى نسخ محتوى ملف firestore.rules ولصقه في تبويب Rules في Firebase Console.";
+      } else if (err.code === 'auth/email-already-in-use') {
+          msg = "هذا البريد الإلكتروني مسجل مسبقاً.";
+      } else if (err.code === 'auth/weak-password') {
+          msg = "كلمة المرور ضعيفة جداً (يجب أن تكون 6 أحرف على الأقل).";
+      } else if (err.code === 'auth/network-request-failed') {
+          msg = "مشكلة في الاتصال بالإنترنت.";
+      } else {
+          msg += err.message;
+      }
+      
+      setError(msg);
       
       if (userToDelete) {
           try {
@@ -318,6 +348,7 @@ const Register = () => {
           }
       }
     }
+    setLoading(false);
   };
 
   return (
@@ -327,7 +358,7 @@ const Register = () => {
           <h2 className="mt-6 text-center text-3xl font-extrabold text-sea-900">إنشاء حساب جديد</h2>
         </div>
         <form className="mt-8 space-y-4" onSubmit={handleRegister}>
-          {error && <div className="text-red-500 text-sm text-center">{error}</div>}
+          {error && <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded text-sm text-center font-bold">{error}</div>}
           
           <input type="text" required className="block w-full px-3 py-2 border rounded-md" placeholder="الاسم الكامل" value={name} onChange={(e) => setName(e.target.value)} />
           <input type="email" required className="block w-full px-3 py-2 border rounded-md" placeholder="البريد الإلكتروني" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -345,8 +376,8 @@ const Register = () => {
             </label>
           </div>
 
-          <button type="submit" className="w-full py-2 px-4 border border-transparent rounded-md text-white bg-sea-600 hover:bg-sea-700">
-            تسجيل
+          <button disabled={loading} type="submit" className="w-full py-2 px-4 border border-transparent rounded-md text-white bg-sea-600 hover:bg-sea-700 disabled:opacity-70">
+            {loading ? 'جاري التسجيل...' : 'تسجيل'}
           </button>
           
           <div className="text-sm text-center">
