@@ -24,7 +24,8 @@ import {
   serverTimestamp,
   writeBatch,
   onSnapshot,
-  deleteField
+  deleteField,
+  deleteDoc
 } from "firebase/firestore";
 import { 
   getStorage, 
@@ -83,5 +84,6 @@ export {
   serverTimestamp,
   writeBatch,
   onSnapshot,
-  deleteField
+  deleteField,
+  deleteDoc
 };
