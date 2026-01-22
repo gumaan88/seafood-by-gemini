@@ -313,7 +313,6 @@ const Badge: React.FC<{ status: string }> = ({ status }) => {
     );
 };
 
-// ... [Navbar component with Notifications] ...
 const Navbar = () => {
   const { userProfile, logout } = useContext(AuthContext);
   const { notifications, unreadCount, markAsRead } = useContext(NotificationContext);
@@ -480,7 +479,6 @@ const Navbar = () => {
   );
 };
 
-// ... [Login, Register unchanged - copy from previous] ...
 const Login = () => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -916,16 +914,13 @@ const ProviderReservations = () => {
                         </div>
                     )}
                     </>
-                )
+                )}
+                </>
             )}
-            </>
-          )
-        }
         </div>
     );
 };
 
-// --- UPGRADED CUSTOMER RESERVATIONS (MyOrders) ---
 const MyReservations = () => {
     const { userProfile } = useContext(AuthContext);
     const { showToast } = useContext(ToastContext);
@@ -1092,7 +1087,6 @@ const MyReservations = () => {
     );
 };
 
-// ... [CustomerHome with Notifications Logic] ...
 const CustomerHome = () => {
     const { userProfile, currentUser } = useContext(AuthContext);
     const { showToast } = useContext(ToastContext);
