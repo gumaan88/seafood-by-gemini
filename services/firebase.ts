@@ -22,7 +22,8 @@ import {
   getDocs, 
   increment, 
   serverTimestamp,
-  writeBatch 
+  writeBatch,
+  onSnapshot
 } from "firebase/firestore";
 import { 
   getStorage, 
@@ -79,5 +80,6 @@ export {
   getDocs, 
   increment, 
   serverTimestamp,
-  writeBatch
+  writeBatch,
+  onSnapshot
 };

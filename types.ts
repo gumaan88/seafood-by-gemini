@@ -64,3 +64,14 @@ export interface Follow {
   customerId: string;
   providerId: string;
 }
+
+export interface AppNotification {
+  id: string;
+  recipientId: string;
+  title: string;
+  body: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  read: boolean;
+  createdAt: number; // Timestamp
+  link?: string;
+}
