@@ -45,7 +45,11 @@ import {
   AdjustmentsHorizontalIcon,
   FolderIcon,
   ListBulletIcon,
-  Squares2X2Icon
+  Squares2X2Icon,
+  SparklesIcon,
+  FireIcon,
+  ArchiveBoxIcon,
+  BoltIcon
 } from '@heroicons/react/24/outline';
 
 // --- UTILS: Timezone & Date Helpers ---
@@ -363,9 +367,7 @@ const Navbar = () => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center justify-between h-16">
                     <div className="flex items-center gap-2">
-                        <Link to="/" className="text-2xl font-bold font-sans flex items-center gap-2 hover:opacity-90 transition-opacity">
-                            <span className="text-3xl">✨</span><span>حجزي - Hajzi</span>
-                        </Link>
+                        <Link to="/" className="text-2xl font-bold font-sans flex items-center gap-2 hover:opacity-90 transition-opacity"><span className="text-3xl">✨</span><span>حجزي - Hajzi</span></Link>
                     </div>
                     <div className="hidden md:block">
                         <div className="ml-10 flex items-center space-x-4 space-x-reverse">
@@ -415,9 +417,7 @@ const Navbar = () => {
                                             <Link to="/my-reservations" className="nav-link">حجوزاتي</Link>
                                         </>
                                     )}
-                                    <button onClick={logout} className="bg-red-500/80 hover:bg-red-600 text-white p-2 rounded-full transition-colors" title="تسجيل الخروج">
-                                        <ArrowRightOnRectangleIcon className="h-5 w-5" />
-                                    </button>
+                                    <button onClick={logout} className="bg-red-500/80 hover:bg-red-600 text-white p-2 rounded-full transition-colors" title="تسجيل الخروج"><ArrowRightOnRectangleIcon className="h-5 w-5" /></button>
                                 </>
                             ) : (
                                 <>
@@ -429,9 +429,7 @@ const Navbar = () => {
                     </div>
                     <div className="-mr-2 flex md:hidden gap-2">
                         {userProfile && <button onClick={() => setIsNotifOpen(!isNotifOpen)} className="p-2 relative"><BellIcon className="h-6 w-6 text-gray-200" />{unreadCount > 0 && <span className="absolute top-1 right-1 w-3 h-3 bg-red-500 rounded-full"></span>}</button>}
-                        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="bg-primary-800 p-2 rounded-md text-gray-200 hover:text-white focus:outline-none">
-                            {isMenuOpen ? <XMarkIcon className="h-6 w-6" /> : <Bars3Icon className="h-6 w-6" />}
-                        </button>
+                        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="bg-primary-800 p-2 rounded-md text-gray-200 hover:text-white focus:outline-none">{isMenuOpen ? <XMarkIcon className="h-6 w-6" /> : <Bars3Icon className="h-6 w-6" />}</button>
                     </div>
                 </div>
             </div>
@@ -511,9 +509,7 @@ const Login = () => {
     return (
         <div className="min-h-[calc(100vh-64px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
             <Card className="max-w-md w-full p-8 space-y-8 animate-slide-up border-t-4 border-t-primary-500">
-                <div>
-                    <h2 className="mt-2 text-center text-3xl font-extrabold text-primary-900">تسجيل الدخول</h2>
-                </div>
+                <div><h2 className="mt-2 text-center text-3xl font-extrabold text-primary-900">تسجيل الدخول</h2></div>
                 <form className="mt-8 space-y-6" onSubmit={handleLogin}>
                     <div className="rounded-md shadow-sm -space-y-px">
                         <input type="text" required className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm" placeholder="البريد الإلكتروني أو رقم الجوال" value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
@@ -573,9 +569,7 @@ const Register = () => {
     return (
         <div className="min-h-[calc(100vh-64px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
             <Card className="max-w-md w-full p-8 space-y-8 animate-slide-up border-t-4 border-t-primary-500">
-                <div>
-                    <h2 className="mt-2 text-center text-3xl font-extrabold text-primary-900">حساب جديد</h2>
-                </div>
+                <div><h2 className="mt-2 text-center text-3xl font-extrabold text-primary-900">حساب جديد</h2></div>
                 <form className="mt-8 space-y-4" onSubmit={handleRegister}>
                     <div className="space-y-3">
                         <input type="text" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none" placeholder="الاسم الكامل / اسم المتجر" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
@@ -583,14 +577,8 @@ const Register = () => {
                         <input type="password" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none" placeholder="كلمة المرور (6 أحرف على الأقل)" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} />
                     </div>
                     <div className="grid grid-cols-2 gap-4 mt-4">
-                        <div onClick={() => setFormData({ ...formData, role: 'customer' })} className={`cursor-pointer p-4 rounded-lg border-2 text-center transition-all ${formData.role === 'customer' ? 'border-primary-600 bg-primary-50 text-primary-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-primary-300'}`}>
-                            <div>🍽️</div>
-                            <div className="text-sm mt-1">عميل</div>
-                        </div>
-                        <div onClick={() => setFormData({ ...formData, role: 'provider' })} className={`cursor-pointer p-4 rounded-lg border-2 text-center transition-all ${formData.role === 'provider' ? 'border-primary-600 bg-primary-50 text-primary-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-primary-300'}`}>
-                            <div>👨‍🍳</div>
-                            <div className="text-sm mt-1">مقدم خدمة</div>
-                        </div>
+                        <div onClick={() => setFormData({ ...formData, role: 'customer' })} className={`cursor-pointer p-4 rounded-lg border-2 text-center transition-all ${formData.role === 'customer' ? 'border-primary-600 bg-primary-50 text-primary-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-primary-300'}`}><div>🍽️</div><div className="text-sm mt-1">عميل</div></div>
+                        <div onClick={() => setFormData({ ...formData, role: 'provider' })} className={`cursor-pointer p-4 rounded-lg border-2 text-center transition-all ${formData.role === 'provider' ? 'border-primary-600 bg-primary-50 text-primary-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-primary-300'}`}><div>👨‍🍳</div><div className="text-sm mt-1">مقدم خدمة</div></div>
                     </div>
                     {formData.role === 'provider' && (
                         <div className="animate-fade-in space-y-3 mt-4">
@@ -607,9 +595,7 @@ const Register = () => {
                         </div>
                     )}
                     <Button type="submit" isLoading={loading} className="w-full py-3 mt-6">تسجيل</Button>
-                    <div className="text-sm text-center">
-                        <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500">لديك حساب؟ سجل دخول</Link>
-                    </div>
+                    <div className="text-sm text-center"><Link to="/login" className="font-medium text-primary-600 hover:text-primary-500">لديك حساب؟ سجل دخول</Link></div>
                 </form>
             </Card>
         </div>
@@ -650,10 +636,7 @@ const ProviderDashboard = () => {
 
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold text-gray-800">لوحة التحكم</h1>
-                <p className="text-gray-500 mt-2">نظرة عامة على نشاطك اليوم</p>
-            </div>
+            <div><h1 className="text-3xl font-bold text-gray-800">لوحة التحكم</h1><p className="text-gray-500 mt-2">نظرة عامة على نشاطك اليوم</p></div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard title="الأصناف / الخدمات" value={stats.items} color="#6366f1" icon={<ShoppingBagIcon className="w-6 h-6" />} />
                 <StatCard title="العروض النشطة" value={stats.offers} color="#10b981" icon={<CalendarIcon className="w-6 h-6" />} />
@@ -721,7 +704,8 @@ const ProviderReservations = () => {
 
     const toggleSelectAll = () => {
         if (statusFilter === 'all') return;
-        if (selectedIds.size === filteredReservations.length) setSelectedIds(new Set()); else setSelectedIds(new Set(filteredReservations.map(r => r.id)));
+        if (selectedIds.size === filteredReservations.length) setSelectedIds(new Set());
+        else setSelectedIds(new Set(filteredReservations.map(r => r.id)));
     };
 
     const handleBulkAction = async () => {
@@ -768,9 +752,7 @@ const ProviderReservations = () => {
     return (
         <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6 min-h-screen">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><ClipboardDocumentCheckIcon className="w-8 h-8 text-primary-600" /> إدارة الحجوزات</h1>
-                </div>
+                <div><h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><ClipboardDocumentCheckIcon className="w-8 h-8 text-primary-600" /> إدارة الحجوزات</h1></div>
                 <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-gray-200">
                     <CalendarDaysIcon className="w-5 h-5 text-gray-400" />
                     <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="text-sm border-none focus:ring-0 text-gray-600 font-medium outline-none" />
@@ -781,33 +763,12 @@ const ProviderReservations = () => {
             {loading ? <div className="grid gap-4"><SkeletonCard /><SkeletonCard /></div> : (
                 <>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-primary-500">
-                            <p className="text-xs text-gray-500 font-bold mb-1">العدد</p>
-                            <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
-                        </div>
-                        <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-yellow-500">
-                            <p className="text-xs text-gray-500 font-bold mb-1">معلق</p>
-                            <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
-                        </div>
-                        <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-green-500">
-                            <p className="text-xs text-gray-500 font-bold mb-1">مؤكد</p>
-                            <p className="text-2xl font-bold text-green-600">{stats.confirmed}</p>
-                        </div>
-                        <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-purple-500">
-                            <p className="text-xs text-gray-500 font-bold mb-1">الإيرادات</p>
-                            <p className="text-2xl font-bold text-purple-600">{stats.revenue.toLocaleString()}</p>
-                        </div>
+                        <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-primary-500"><p className="text-xs text-gray-500 font-bold mb-1">العدد</p><p className="text-2xl font-bold text-gray-800">{stats.total}</p></div>
+                        <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-yellow-500"><p className="text-xs text-gray-500 font-bold mb-1">معلق</p><p className="text-2xl font-bold text-yellow-600">{stats.pending}</p></div>
+                        <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-green-500"><p className="text-xs text-gray-500 font-bold mb-1">مؤكد</p><p className="text-2xl font-bold text-green-600">{stats.confirmed}</p></div>
+                        <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-purple-500"><p className="text-xs text-gray-500 font-bold mb-1">الإيرادات</p><p className="text-2xl font-bold text-purple-600">{stats.revenue.toLocaleString()}</p></div>
                     </div>
-                    {Object.keys(stats.itemCounts).length > 0 &&
-                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                            {Object.entries(stats.itemCounts).map(([name, count]) => (
-                                <div key={name} className="flex-shrink-0 bg-white px-3 py-1 rounded-full border border-gray-200 shadow-sm flex items-center gap-2 text-sm">
-                                    <span className="text-gray-600 font-medium">{name}</span>
-                                    <span className="bg-primary-100 text-primary-700 px-2 rounded-full font-bold text-xs">{count}</span>
-                                </div>
-                            ))}
-                        </div>
-                    }
+                    {Object.keys(stats.itemCounts).length > 0 && <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{Object.entries(stats.itemCounts).map(([name, count]) => (<div key={name} className="flex-shrink-0 bg-white px-3 py-1 rounded-full border border-gray-200 shadow-sm flex items-center gap-2 text-sm"><span className="text-gray-600 font-medium">{name}</span><span className="bg-primary-100 text-primary-700 px-2 rounded-full font-bold text-xs">{count}</span></div>))}</div>}
                     <Card className="p-4 flex flex-col lg:flex-row gap-4 justify-between items-center sticky top-20 z-40 shadow-md">
                         <div className="flex flex-1 w-full gap-4 flex-col sm:flex-row">
                             <div className="relative flex-1">
@@ -833,83 +794,66 @@ const ProviderReservations = () => {
                             <button onClick={() => setSelectedIds(new Set())} className="text-gray-400 hover:text-white"><XMarkIcon className="w-5 h-5" /></button>
                         </div>
                     )}
-                    {filteredReservations.length === 0 ?
-                        <div className="text-center py-20 bg-white rounded-2xl shadow-sm border border-dashed border-gray-300">
-                            <div className="text-6xl mb-4">📭</div>
-                            <h3 className="text-xl font-bold text-gray-700">لا توجد حجوزات</h3>
-                        </div> : (
-                            <>
-                                {groupBy === 'none' && (
-                                    <div className="space-y-4">
-                                        {statusFilter !== 'all' && <div className="flex items-center gap-2 px-2 text-sm text-gray-500 font-medium"><input type="checkbox" onChange={toggleSelectAll} checked={selectedIds.size === filteredReservations.length && filteredReservations.length > 0} className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" /><span>تحديد الكل</span></div>}
-                                        {filteredReservations.map(res => (
-                                            <Card key={res.id} className={`p-4 flex flex-col md:flex-row items-center gap-4 transition-all ${selectedIds.has(res.id) ? 'ring-2 ring-primary-500 bg-primary-50' : 'hover:border-primary-300'}`}>
-                                                {statusFilter !== 'all' && (<input type="checkbox" checked={selectedIds.has(res.id)} onChange={() => toggleSelect(res.id)} className="w-5 h-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />)}
-                                                <div className="flex-1 w-full md:w-auto">
-                                                    <div className="flex justify-between items-start">
-                                                        <div>
-                                                            <h3 className="font-bold text-gray-900">{res.offeringName}</h3>
-                                                            <p className="text-sm text-gray-500 flex items-center gap-1"><UserIcon className="w-3 h-3" /> {res.customerName}</p>
-                                                        </div>
-                                                        <Badge status={res.status} />
-                                                    </div>
-                                                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-600">
-                                                        <span className="flex items-center gap-1"><ClockIcon className="w-4 h-4 text-gray-400" /> {new Date(res.createdAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
-                                                        <span className="flex items-center gap-1 font-bold text-primary-700"><CurrencyDollarIcon className="w-4 h-4" /> {res.totalPrice} ر.ي</span>
-                                                    </div>
-                                                    {res.paymentReference && <div className="mt-2 bg-green-50 text-green-800 text-xs px-2 py-1 rounded inline-flex items-center gap-1"><BanknotesIcon className="w-3 h-3" /> مرجع الدفع: {res.paymentReference}</div>}
+                    {filteredReservations.length === 0 ? <div className="text-center py-20 bg-white rounded-2xl shadow-sm border border-dashed border-gray-300"><div className="text-6xl mb-4">📭</div><h3 className="text-xl font-bold text-gray-700">لا توجد حجوزات</h3></div> : (
+                        <>
+                            {groupBy === 'none' && (
+                                <div className="space-y-4">
+                                    {statusFilter !== 'all' && <div className="flex items-center gap-2 px-2 text-sm text-gray-500 font-medium"><input type="checkbox" onChange={toggleSelectAll} checked={selectedIds.size === filteredReservations.length && filteredReservations.length > 0} className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" /><span>تحديد الكل</span></div>}
+                                    {filteredReservations.map(res => (
+                                        <Card key={res.id} className={`p-4 flex flex-col md:flex-row items-center gap-4 transition-all ${selectedIds.has(res.id) ? 'ring-2 ring-primary-500 bg-primary-50' : 'hover:border-primary-300'}`}>
+                                            {statusFilter !== 'all' && (<input type="checkbox" checked={selectedIds.has(res.id)} onChange={() => toggleSelect(res.id)} className="w-5 h-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />)}
+                                            <div className="flex-1 w-full md:w-auto">
+                                                <div className="flex justify-between items-start">
+                                                    <div><h3 className="font-bold text-gray-900">{res.offeringName}</h3><p className="text-sm text-gray-500 flex items-center gap-1"><UserIcon className="w-3 h-3" /> {res.customerName}</p></div>
+                                                    <Badge status={res.status} />
                                                 </div>
-                                                <div className="flex items-center gap-2 w-full md:w-auto justify-end border-t md:border-t-0 pt-3 md:pt-0 mt-3 md:mt-0">
-                                                    {res.status === 'pending' && (
-                                                        <>
-                                                            <Button variant="ghost" onClick={() => handleSingleStatus(res.id, 'confirmed')} className="text-green-600 bg-green-50 hover:bg-green-100"><CheckCircleIcon className="w-5 h-5" /></Button>
-                                                            <Button variant="ghost" onClick={() => handleSingleStatus(res.id, 'cancelled')} className="text-red-600 bg-red-50 hover:bg-red-100"><XCircleIcon className="w-5 h-5" /></Button>
-                                                        </>
-                                                    )}
-                                                    {res.status === 'confirmed' && (<Button variant="ghost" onClick={() => handleSingleStatus(res.id, 'completed')} className="text-blue-600 bg-blue-50 hover:bg-blue-100">إتمام</Button>)}
+                                                <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-600">
+                                                    <span className="flex items-center gap-1"><ClockIcon className="w-4 h-4 text-gray-400" /> {new Date(res.createdAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                    <span className="flex items-center gap-1 font-bold text-primary-700"><CurrencyDollarIcon className="w-4 h-4" /> {res.totalPrice} ر.ي</span>
                                                 </div>
-                                            </Card>
-                                        ))}
-                                    </div>
-                                )}
-                                {groupBy !== 'none' && groupedReservations && (
-                                    <div className="space-y-6">
-                                        {groupedReservations.map((group, idx) => (
-                                            <div key={idx} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
-                                                <div className="bg-gray-50 p-4 border-b flex justify-between items-center">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-lg">{group.name[0]}</div>
-                                                        <div>
-                                                            <h3 className="font-bold text-gray-800">{group.name}</h3>
-                                                            <p className="text-xs text-gray-500">{group.items.length} حجوزات</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div className="text-lg font-bold text-primary-700">{group.total} ر.ي</div>
-                                                    </div>
-                                                </div>
-                                                <div className="divide-y divide-gray-100">
-                                                    {group.items.map(res => (
-                                                        <div key={res.id} className="p-4 hover:bg-gray-50 flex justify-between items-center">
-                                                            <div className="flex items-center gap-3">
-                                                                {statusFilter !== 'all' && (<input type="checkbox" checked={selectedIds.has(res.id)} onChange={() => toggleSelect(res.id)} className="w-4 h-4 rounded text-primary-600" />)}
-                                                                <div>
-                                                                    <p className="font-medium text-sm text-gray-800">{groupBy === 'item' ? res.customerName : res.offeringName} (x{res.quantity})</p>
-                                                                    <p className="text-xs text-gray-500">{new Date(res.createdAt).toLocaleTimeString('ar-SA')}</p>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex items-center gap-3">
-                                                                <Badge status={res.status} />
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
+                                                {res.paymentReference && <div className="mt-2 bg-green-50 text-green-800 text-xs px-2 py-1 rounded inline-flex items-center gap-1"><BanknotesIcon className="w-3 h-3" /> مرجع الدفع: {res.paymentReference}</div>}
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </>
-                        )}
+                                            <div className="flex items-center gap-2 w-full md:w-auto justify-end border-t md:border-t-0 pt-3 md:pt-0 mt-3 md:mt-0">
+                                                {res.status === 'pending' && (
+                                                    <>
+                                                        <Button variant="ghost" onClick={() => handleSingleStatus(res.id, 'confirmed')} className="text-green-600 bg-green-50 hover:bg-green-100"><CheckCircleIcon className="w-5 h-5" /></Button>
+                                                        <Button variant="ghost" onClick={() => handleSingleStatus(res.id, 'cancelled')} className="text-red-600 bg-red-50 hover:bg-red-100"><XCircleIcon className="w-5 h-5" /></Button>
+                                                    </>
+                                                )}
+                                                {res.status === 'confirmed' && (<Button variant="ghost" onClick={() => handleSingleStatus(res.id, 'completed')} className="text-blue-600 bg-blue-50 hover:bg-blue-100">إتمام</Button>)}
+                                            </div>
+                                        </Card>
+                                    ))}
+                                </div>
+                            )}
+                            {groupBy !== 'none' && groupedReservations && (
+                                <div className="space-y-6">
+                                    {groupedReservations.map((group, idx) => (
+                                        <div key={idx} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
+                                            <div className="bg-gray-50 p-4 border-b flex justify-between items-center">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-lg">{group.name[0]}</div>
+                                                    <div><h3 className="font-bold text-gray-800">{group.name}</h3><p className="text-xs text-gray-500">{group.items.length} حجوزات</p></div>
+                                                </div>
+                                                <div className="text-right"><div className="text-lg font-bold text-primary-700">{group.total} ر.ي</div></div>
+                                            </div>
+                                            <div className="divide-y divide-gray-100">
+                                                {group.items.map(res => (
+                                                    <div key={res.id} className="p-4 hover:bg-gray-50 flex justify-between items-center">
+                                                        <div className="flex items-center gap-3">
+                                                            {statusFilter !== 'all' && (<input type="checkbox" checked={selectedIds.has(res.id)} onChange={() => toggleSelect(res.id)} className="w-4 h-4 rounded text-primary-600" />)}
+                                                            <div><p className="font-medium text-sm text-gray-800">{groupBy === 'item' ? res.customerName : res.offeringName} (x{res.quantity})</p><p className="text-xs text-gray-500">{new Date(res.createdAt).toLocaleTimeString('ar-SA')}</p></div>
+                                                        </div>
+                                                        <div className="flex items-center gap-3"><Badge status={res.status} /></div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    )}
                 </>
             )}
         </div>
@@ -976,10 +920,7 @@ const MyReservations = () => {
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto min-h-screen">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><ShoppingBagIcon className="w-8 h-8 text-primary-600" /> حجوزاتي</h1>
-                    <p className="text-gray-500 text-sm mt-1">تابع حالة حجوزاتك وسجل المدفوعات</p>
-                </div>
+                <div><h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><ShoppingBagIcon className="w-8 h-8 text-primary-600" /> حجوزاتي</h1><p className="text-gray-500 text-sm mt-1">تابع حالة حجوزاتك وسجل المدفوعات</p></div>
                 <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-gray-200">
                     <CalendarDaysIcon className="w-5 h-5 text-gray-400" />
                     <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="text-sm border-none focus:ring-0 text-gray-600 font-medium outline-none" />
@@ -1005,21 +946,11 @@ const MyReservations = () => {
                     <Card key={res.id} className="p-6">
                         <div className="flex flex-col md:flex-row justify-between gap-6">
                             <div className="flex-1">
-                                <div className="flex items-center justify-between mb-2">
-                                    <h3 className="font-bold text-xl text-primary-800">{res.offeringName}</h3>
-                                    <Badge status={res.status} />
-                                </div>
-                                <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-3">
-                                    <span>الكمية: <b className="text-gray-900">{res.quantity}</b></span>
-                                    <span>الإجمالي: <b className="text-primary-700">{res.totalPrice} ر.ي</b></span>
-                                    <span className="text-gray-400">{new Date(res.createdAt).toLocaleDateString('ar-SA')}</span>
-                                </div>
+                                <div className="flex items-center justify-between mb-2"><h3 className="font-bold text-xl text-primary-800">{res.offeringName}</h3><Badge status={res.status} /></div>
+                                <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-3"><span>الكمية: <b className="text-gray-900">{res.quantity}</b></span><span>الإجمالي: <b className="text-primary-700">{res.totalPrice} ر.ي</b></span><span className="text-gray-400">{new Date(res.createdAt).toLocaleDateString('ar-SA')}</span></div>
                                 {res.status === 'pending' && (
                                     <div className="bg-orange-50 p-3 rounded-lg border border-orange-100 mt-2">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <BanknotesIcon className="w-5 h-5 text-orange-600" />
-                                            <span className="font-bold text-sm text-orange-800">تأكيد الدفع</span>
-                                        </div>
+                                        <div className="flex items-center gap-2 mb-2"><BanknotesIcon className="w-5 h-5 text-orange-600" /><span className="font-bold text-sm text-orange-800">تأكيد الدفع</span></div>
                                         {res.paymentReference ? <div className="text-sm text-green-700 font-bold flex items-center gap-2"><CheckCircleIcon className="w-4 h-4" /> تم إرسال الرقم: {res.paymentReference}</div> : (
                                             <div className="flex gap-2">
                                                 <input type="text" placeholder="رقم السند / المحفظة" className="flex-1 border p-2 rounded text-sm outline-none focus:border-orange-400" value={paymentRefs[res.id] || ''} onChange={e => setPaymentRefs({ ...paymentRefs, [res.id]: e.target.value })} />
@@ -1031,12 +962,7 @@ const MyReservations = () => {
                             </div>
                             <div className="flex flex-col justify-center items-end border-t md:border-t-0 md:border-r md:pr-4 pt-4 md:pt-0 border-gray-100">
                                 {res.status === 'pending' && <button onClick={() => cancelReservation(res.id, res.providerId, res.offeringName)} className="text-red-500 text-sm hover:underline hover:text-red-700 font-medium">إلغاء</button>}
-                                {res.status === 'confirmed' && (
-                                    <div className="text-center">
-                                        <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold mb-1">مؤكد</div>
-                                        <p className="text-xs text-gray-400">يرجى الحضور في الموعد</p>
-                                    </div>
-                                )}
+                                {res.status === 'confirmed' && <div className="text-center"><div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold mb-1">مؤكد</div><p className="text-xs text-gray-400">يرجى الحضور في الموعد</p></div>}
                                 {res.status === 'completed' && <div className="flex items-center gap-1 text-green-600 font-bold text-sm"><CheckBadgeIcon className="w-5 h-5" /> مكتمل</div>}
                             </div>
                         </div>
@@ -1047,87 +973,245 @@ const MyReservations = () => {
     );
 };
 
+// --- REDESIGNED PROVIDER OFFERS ---
 const ProviderOffers = () => {
     const { userProfile } = useContext(AuthContext);
     const { showToast } = useContext(ToastContext);
+    
+    // State
     const [items, setItems] = useState<CatalogItem[]>([]);
     const [offers, setOffers] = useState<Offering[]>([]);
-    const [selectedItem, setSelectedItem] = useState('');
-    const [offerData, setOfferData] = useState({ price: 0, quantity: 10, date: new Date().toISOString().split('T')[0] });
+    const [loading, setLoading] = useState(true);
+    const [filterStatus, setFilterStatus] = useState<'active' | 'upcoming' | 'ended'>('active');
+    
+    // Create Modal State
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [selectedItemForOffer, setSelectedItemForOffer] = useState<CatalogItem | null>(null);
+    const [newOfferData, setNewOfferData] = useState({ price: 0, quantity: 10, date: getSaudiDate() });
+    const [itemSearch, setItemSearch] = useState('');
 
     useEffect(() => {
-        if (!userProfile) return;
+        if(!userProfile) return;
         const load = async () => {
-            const itemsSnap = await getDocs(query(collection(db, 'catalogItems'), where('providerId', '==', userProfile.uid), where('isActive', '==', true)));
-            setItems(itemsSnap.docs.map(d => ({ id: d.id, ...d.data() } as CatalogItem)));
-            const offersSnap = await getDocs(query(collection(db, 'offerings'), where('providerId', '==', userProfile.uid)));
-            setOffers(offersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Offering)));
+            setLoading(true);
+            try {
+                // Load Catalog Items
+                const itemsSnap = await getDocs(query(collection(db, 'catalogItems'), where('providerId', '==', userProfile.uid), where('isActive', '==', true)));
+                setItems(itemsSnap.docs.map(d => ({id: d.id, ...d.data()} as CatalogItem)));
+                
+                // Load Offers (All)
+                const offersSnap = await getDocs(query(collection(db, 'offerings'), where('providerId', '==', userProfile.uid)));
+                setOffers(offersSnap.docs.map(d => ({id: d.id, ...d.data()} as Offering)));
+            } catch(e) { console.error(e); showToast("خطأ في تحميل البيانات", "error"); }
+            setLoading(false);
         };
         load();
     }, [userProfile]);
 
-    const handleCreateOffer = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!userProfile || !selectedItem) return;
-        const item = items.find(i => i.id === selectedItem);
-        if (!item) return;
+    // Derived Data
+    const stats = useMemo(() => {
+        const totalActive = offers.filter(o => o.isActive && o.quantityRemaining > 0).length;
+        const totalSold = offers.reduce((acc, o) => acc + (o.quantityTotal - o.quantityRemaining), 0);
+        const totalRevenue = offers.reduce((acc, o) => acc + ((o.quantityTotal - o.quantityRemaining) * o.price), 0);
+        return { totalActive, totalSold, totalRevenue };
+    }, [offers]);
+
+    const filteredOffers = useMemo(() => {
+        const today = getSaudiDate();
+        return offers.filter(o => {
+            if (filterStatus === 'active') return o.isActive && o.quantityRemaining > 0 && o.date <= today; // Should technically be date >= today if it's an appointment, but simplified for "active"
+            if (filterStatus === 'upcoming') return o.date > today;
+            if (filterStatus === 'ended') return !o.isActive || o.quantityRemaining === 0;
+            return true;
+        }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [offers, filterStatus]);
+
+    const filteredItemsForSelection = useMemo(() => {
+        return items.filter(i => i.name.toLowerCase().includes(itemSearch.toLowerCase()));
+    }, [items, itemSearch]);
+
+    // Handlers
+    const handleCreateOffer = async () => {
+        if(!userProfile || !selectedItemForOffer) return;
         try {
-            await addDoc(collection(db, 'offerings'), { itemId: item.id, providerId: userProfile.uid, itemName: item.name, itemImageUrl: item.imageUrl, price: Number(offerData.price), quantityTotal: Number(offerData.quantity), quantityRemaining: Number(offerData.quantity), date: offerData.date, isActive: true });
+            await addDoc(collection(db, 'offerings'), { 
+                itemId: selectedItemForOffer.id, 
+                providerId: userProfile.uid, 
+                itemName: selectedItemForOffer.name, 
+                itemImageUrl: selectedItemForOffer.imageUrl, 
+                price: Number(newOfferData.price), 
+                quantityTotal: Number(newOfferData.quantity), 
+                quantityRemaining: Number(newOfferData.quantity), 
+                date: newOfferData.date, 
+                isActive: true 
+            });
             showToast("تم نشر العرض بنجاح", "success");
-        } catch (e) { showToast("خطأ في النشر", "error"); }
+            setIsCreateModalOpen(false);
+            setSelectedItemForOffer(null);
+            // Reload offers locally or fetch again (simplified: fetch again)
+            const offersSnap = await getDocs(query(collection(db, 'offerings'), where('providerId', '==', userProfile.uid)));
+            setOffers(offersSnap.docs.map(d => ({id: d.id, ...d.data()} as Offering)));
+        } catch(e) { showToast("خطأ في النشر", "error"); }
     };
 
+    const handleToggleStatus = async (offer: Offering) => {
+        if(!confirm(offer.isActive ? "هل تريد إيقاف هذا العرض؟ لن يظهر للعملاء." : "هل تريد إعادة تفعيل العرض؟")) return;
+        try {
+            await updateDoc(doc(db, 'offerings', offer.id), { isActive: !offer.isActive });
+            setOffers(prev => prev.map(o => o.id === offer.id ? {...o, isActive: !o.isActive} : o));
+            showToast("تم تحديث الحالة", "success");
+        } catch(e) { showToast("خطأ", "error"); }
+    };
+
+    const handleDeleteOffer = async (id: string) => {
+        if(!confirm("حذف العرض نهائياً؟")) return;
+        try {
+            await deleteDoc(doc(db, 'offerings', id));
+            setOffers(prev => prev.filter(o => o.id !== id));
+            showToast("تم الحذف", "success");
+        } catch(e) { showToast("خطأ", "error"); }
+    };
+
+    // Sub-components
+    const StatBadge = ({label, value, icon, color}: any) => (
+        <div className={`flex items-center gap-3 px-4 py-3 bg-white rounded-2xl border border-gray-100 shadow-sm min-w-[150px]`}>
+            <div className={`p-2 rounded-full ${color} text-white`}>{icon}</div>
+            <div>
+                <p className="text-xs text-gray-500 font-bold">{label}</p>
+                <p className="text-lg font-bold text-gray-800">{value}</p>
+            </div>
+        </div>
+    );
+
     return (
-        <div className="p-6 max-w-7xl mx-auto">
-            <h1 className="text-3xl font-bold mb-8 text-gray-800">نشر العروض / المواعيد</h1>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <Card className="p-6 h-fit lg:col-span-1 border-t-4 border-t-green-500">
-                    <h3 className="font-bold text-xl mb-4 text-green-700 flex items-center gap-2"><CalendarIcon className="w-6 h-6" /> عرض جديد</h3>
-                    <form onSubmit={handleCreateOffer} className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">اختر من الكتالوج</label>
-                            <select className="w-full border p-3 rounded-lg outline-none bg-white" required value={selectedItem} onChange={e => {
-                                setSelectedItem(e.target.value);
-                                const i = items.find(x => x.id === e.target.value);
-                                if (i) setOfferData({ ...offerData, price: i.priceDefault });
-                            }}>
-                                <option value="">-- اختر --</option>
-                                {items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                            </select>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">سعر العرض</label>
-                                <input type="number" required className="w-full border p-3 rounded-lg outline-none" value={offerData.price || ''} onChange={e => setOfferData({ ...offerData, price: Number(e.target.value) })} />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">العدد المتاح</label>
-                                <input type="number" required className="w-full border p-3 rounded-lg outline-none" value={offerData.quantity} onChange={e => setOfferData({ ...offerData, quantity: Number(e.target.value) })} />
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">تاريخ العرض</label>
-                            <input type="date" required className="w-full border p-3 rounded-lg outline-none" value={offerData.date} onChange={e => setOfferData({ ...offerData, date: e.target.value })} />
-                        </div>
-                        <Button type="submit" variant="secondary" className="w-full bg-green-600 hover:bg-green-700">نشر الآن</Button>
-                    </form>
-                </Card>
-                <div className="lg:col-span-2 space-y-4">
-                    <h3 className="font-bold text-gray-600">سجل العروض</h3>
-                    {offers.map(offer => (
-                        <div key={offer.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex justify-between items-center transition-transform hover:translate-x-1">
-                            <div className="flex items-center gap-4">
-                                <img src={offer.itemImageUrl} className="w-16 h-16 rounded-lg object-cover shadow-sm" alt="" />
-                                <div>
-                                    <div className="font-bold text-gray-800">{offer.itemName}</div>
-                                    <div className="text-sm text-gray-500 flex items-center gap-2"><CalendarIcon className="w-4 h-4" /> {offer.date}<span className="bg-gray-100 px-2 rounded-full text-xs">المتبقي: {offer.quantityRemaining}</span></div>
-                                </div>
-                            </div>
-                            <div className="text-xl font-bold text-primary-700">{offer.price} <span className="text-sm font-normal">ر.ي</span></div>
-                        </div>
-                    ))}
+        <div className="p-6 max-w-7xl mx-auto min-h-screen space-y-8">
+            {/* Header Area */}
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><CalendarIcon className="w-8 h-8 text-primary-600"/> إدارة العروض والمواعيد</h1>
+                    <p className="text-gray-500 mt-2">تحكم كامل في مواعيدك وعروضك المتاحة للعملاء</p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                    <StatBadge label="عروض نشطة" value={stats.totalActive} icon={<BoltIcon className="w-5 h-5"/>} color="bg-orange-500" />
+                    <StatBadge label="مبيعات العروض" value={stats.totalSold} icon={<FireIcon className="w-5 h-5"/>} color="bg-red-500" />
+                    <StatBadge label="إيرادات" value={`${stats.totalRevenue.toLocaleString()}`} icon={<BanknotesIcon className="w-5 h-5"/>} color="bg-green-600" />
                 </div>
             </div>
+
+            {/* Controls Bar */}
+            <Card className="p-2 flex flex-col sm:flex-row justify-between items-center gap-4 sticky top-20 z-30 shadow-md">
+                <div className="flex bg-gray-100 p-1 rounded-xl w-full sm:w-auto">
+                    <button onClick={() => setFilterStatus('active')} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${filterStatus === 'active' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>نشطة</button>
+                    <button onClick={() => setFilterStatus('upcoming')} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${filterStatus === 'upcoming' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>قادمة</button>
+                    <button onClick={() => setFilterStatus('ended')} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${filterStatus === 'ended' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>منتهية</button>
+                </div>
+                <Button onClick={() => setIsCreateModalOpen(true)} className="w-full sm:w-auto shadow-lg shadow-primary-500/30"><PlusIcon className="w-5 h-5"/> عرض جديد</Button>
+            </Card>
+
+            {/* Offers Grid */}
+            {loading ? <div className="grid grid-cols-3 gap-4"><SkeletonCard/><SkeletonCard/><SkeletonCard/></div> : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
+                    {filteredOffers.length === 0 && <div className="col-span-full text-center py-20 bg-white rounded-2xl border-2 border-dashed border-gray-200"><SparklesIcon className="w-16 h-16 text-gray-300 mx-auto mb-4"/><p className="text-gray-500 text-lg">لا توجد عروض في هذه القائمة</p></div>}
+                    {filteredOffers.map(offer => {
+                        const percentSold = ((offer.quantityTotal - offer.quantityRemaining) / offer.quantityTotal) * 100;
+                        return (
+                            <div key={offer.id} className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col">
+                                {/* Image & Header */}
+                                <div className="h-40 bg-gray-100 relative overflow-hidden">
+                                    <img src={offer.itemImageUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={offer.itemName} />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                                    <div className="absolute bottom-3 right-3 text-white">
+                                        <h3 className="font-bold text-lg shadow-black drop-shadow-md">{offer.itemName}</h3>
+                                        <p className="text-xs opacity-90 flex items-center gap-1"><CalendarIcon className="w-3 h-3"/> {offer.date}</p>
+                                    </div>
+                                    <div className="absolute top-3 left-3 bg-white/95 backdrop-blur px-3 py-1 rounded-lg text-sm font-bold text-primary-700 shadow-md">
+                                        {offer.price} <span className="text-[10px]">ر.ي</span>
+                                    </div>
+                                </div>
+
+                                {/* Body */}
+                                <div className="p-5 flex-1 flex flex-col gap-4">
+                                    {/* Stats Bar */}
+                                    <div>
+                                        <div className="flex justify-between text-xs font-bold text-gray-500 mb-1">
+                                            <span>المباع: {offer.quantityTotal - offer.quantityRemaining}</span>
+                                            <span>المتبقي: {offer.quantityRemaining}</span>
+                                        </div>
+                                        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                                            <div className="h-full bg-gradient-to-r from-primary-500 to-purple-500 rounded-full transition-all duration-1000" style={{ width: `${percentSold}%` }}></div>
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex gap-2 mt-auto pt-4 border-t border-gray-50">
+                                        <button onClick={() => handleToggleStatus(offer)} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${offer.isActive ? 'bg-orange-50 text-orange-600 hover:bg-orange-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+                                            {offer.isActive ? 'إيقاف' : 'تفعيل'}
+                                        </button>
+                                        <button onClick={() => handleDeleteOffer(offer.id)} className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"><TrashIcon className="w-5 h-5"/></button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* Create Offer Modal */}
+            <Modal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="نشر عرض جديد">
+                {!selectedItemForOffer ? (
+                    // Step 1: Select Item
+                    <div className="space-y-4">
+                        <div className="relative">
+                            <MagnifyingGlassIcon className="absolute right-3 top-3 w-5 h-5 text-gray-400"/>
+                            <input type="text" placeholder="ابحث عن صنف..." className="w-full pr-10 pl-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none bg-gray-50" value={itemSearch} onChange={e => setItemSearch(e.target.value)} autoFocus />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1 scrollbar-thin">
+                            {filteredItemsForSelection.map(item => (
+                                <div key={item.id} onClick={() => { setSelectedItemForOffer(item); setNewOfferData({...newOfferData, price: item.priceDefault}); }} className="cursor-pointer border border-gray-200 rounded-xl p-3 hover:border-primary-500 hover:bg-primary-50 transition-all flex flex-col items-center text-center gap-2 group">
+                                    <img src={item.imageUrl} className="w-16 h-16 rounded-lg object-cover bg-gray-200" alt="" />
+                                    <div>
+                                        <p className="font-bold text-sm text-gray-800 line-clamp-1">{item.name}</p>
+                                        <p className="text-xs text-primary-600 font-medium">{item.priceDefault} ر.ي</p>
+                                    </div>
+                                </div>
+                            ))}
+                            {filteredItemsForSelection.length === 0 && <p className="col-span-2 text-center text-gray-400 py-4">لا توجد أصناف مطابقة. أضف أصنافاً للكتالوج أولاً.</p>}
+                        </div>
+                    </div>
+                ) : (
+                    // Step 2: Configure Offer
+                    <div className="space-y-5 animate-slide-up">
+                        <div className="flex items-center gap-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                            <img src={selectedItemForOffer.imageUrl} className="w-16 h-16 rounded-lg object-cover" alt="" />
+                            <div>
+                                <h4 className="font-bold text-gray-800">{selectedItemForOffer.name}</h4>
+                                <button onClick={() => setSelectedItemForOffer(null)} className="text-xs text-primary-600 font-medium hover:underline">تغيير الصنف</button>
+                            </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 mb-1">سعر العرض</label>
+                                <div className="relative">
+                                    <input type="number" className="w-full pl-10 pr-4 py-3 border rounded-xl font-bold text-gray-800 focus:ring-2 focus:ring-primary-500 outline-none" value={newOfferData.price || ''} onChange={e => setNewOfferData({...newOfferData, price: Number(e.target.value)})} />
+                                    <div className="absolute left-3 top-3.5 text-gray-400 text-xs font-bold">ر.ي</div>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 mb-1">الكمية المتاحة</label>
+                                <input type="number" className="w-full px-4 py-3 border rounded-xl font-bold text-gray-800 focus:ring-2 focus:ring-primary-500 outline-none" value={newOfferData.quantity} onChange={e => setNewOfferData({...newOfferData, quantity: Number(e.target.value)})} />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">تاريخ العرض / الموعد</label>
+                            <input type="date" className="w-full px-4 py-3 border rounded-xl text-gray-800 focus:ring-2 focus:ring-primary-500 outline-none" value={newOfferData.date} onChange={e => setNewOfferData({...newOfferData, date: e.target.value})} />
+                        </div>
+
+                        <Button onClick={handleCreateOffer} className="w-full py-3 text-lg shadow-lg shadow-primary-500/30">نشر العرض فوراً</Button>
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 };
