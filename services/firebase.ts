@@ -21,7 +21,8 @@ import {
   orderBy, 
   getDocs, 
   increment, 
-  serverTimestamp 
+  serverTimestamp,
+  writeBatch 
 } from "firebase/firestore";
 import { 
   getStorage, 
@@ -77,5 +78,6 @@ export {
   orderBy, 
   getDocs, 
   increment, 
-  serverTimestamp
+  serverTimestamp,
+  writeBatch
 };
