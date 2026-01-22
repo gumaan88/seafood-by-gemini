@@ -23,7 +23,8 @@ import {
   increment, 
   serverTimestamp,
   writeBatch,
-  onSnapshot
+  onSnapshot,
+  deleteField
 } from "firebase/firestore";
 import { 
   getStorage, 
@@ -81,5 +82,6 @@ export {
   increment, 
   serverTimestamp,
   writeBatch,
-  onSnapshot
+  onSnapshot,
+  deleteField
 };

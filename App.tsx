@@ -3,10 +3,10 @@ import {
     auth, db, uploadFile,
     onAuthStateChanged, User, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, deleteUser,
     doc, getDoc, setDoc, collection, query, where, getDocs, addDoc, updateDoc, increment, serverTimestamp, orderBy,
-    writeBatch, onSnapshot
+    writeBatch, onSnapshot, deleteField
 } from './services/firebase';
 
-import { UserProfile, UserRole, CatalogItem, Offering, Reservation, ProviderProfile, ReservationStatus, AppNotification, ProviderCategory } from './types';
+import { UserProfile, UserRole, CatalogItem, Offering, Reservation, ProviderProfile, ReservationStatus, AppNotification, ProviderCategory, Currency } from './types';
 import { 
   HomeIcon, 
   ShoppingBagIcon, 
@@ -36,7 +36,10 @@ import {
   IdentificationIcon,
   BanknotesIcon,
   BellIcon,
-  BuildingStorefrontIcon
+  BuildingStorefrontIcon,
+  ChartBarIcon,
+  PencilSquareIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 
 // --- UTILS: Timezone & Date Helpers ---
@@ -127,8 +130,10 @@ const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 interface AuthContextType {
   currentUser: User | null;
   userProfile: UserProfile | null;
+  providerProfile: ProviderProfile | null;
   loading: boolean;
   logout: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -136,22 +141,31 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [providerProfile, setProviderProfile] = useState<ProviderProfile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchProfiles = async (uid: string) => {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', uid));
+        if (userDoc.exists()) {
+            const userData = userDoc.data() as UserProfile;
+            setUserProfile(userData);
+            if (userData.role === 'provider') {
+                const provDoc = await getDoc(doc(db, 'providers', uid));
+                if (provDoc.exists()) setProviderProfile(provDoc.data() as ProviderProfile);
+            }
+        }
+      } catch(e) { console.error(e); }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
-        try {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (userDoc.exists()) {
-              setUserProfile(userDoc.data() as UserProfile);
-            }
-        } catch (e) {
-            console.error("Error fetching profile:", e);
-        }
+        await fetchProfiles(user.uid);
       } else {
         setUserProfile(null);
+        setProviderProfile(null);
       }
       setLoading(false);
     });
@@ -163,8 +177,12 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     window.location.hash = '/login';
   };
 
+  const refreshProfile = async () => {
+      if(currentUser) await fetchProfiles(currentUser.uid);
+  }
+
   return (
-    <AuthContext.Provider value={{ currentUser, userProfile, loading, logout }}>
+    <AuthContext.Provider value={{ currentUser, userProfile, providerProfile, loading, logout, refreshProfile }}>
       {!loading && children}
     </AuthContext.Provider>
   );
@@ -298,281 +316,328 @@ const Badge: React.FC<{ status: string }> = ({ status }) => {
     );
 };
 
-// ... [Navbar] ...
+const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean, onClose: () => void, title: string, children: React.ReactNode }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+            <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                <div className="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity backdrop-blur-sm" aria-hidden="true" onClick={onClose}></div>
+                <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+                <div className="relative inline-block align-bottom bg-white rounded-2xl text-right overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full border border-gray-100">
+                    <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div className="flex justify-between items-center mb-4 border-b pb-2">
+                            <h3 className="text-lg leading-6 font-bold text-gray-900" id="modal-title">{title}</h3>
+                            <button onClick={onClose} className="text-gray-400 hover:text-gray-500 focus:outline-none"><XMarkIcon className="h-6 w-6" /></button>
+                        </div>
+                        {children}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const Navbar = () => {
   const { userProfile, logout } = useContext(AuthContext);
   const { notifications, unreadCount, markAsRead } = useContext(NotificationContext);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-        if (notifRef.current && !notifRef.current.contains(event.target as Node)) setIsNotifOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+  
+  useEffect(() => { 
+      const handleClickOutside = (event: MouseEvent) => { 
+          if (notifRef.current && !notifRef.current.contains(event.target as Node)) setIsNotifOpen(false); 
+      }; 
+      document.addEventListener("mousedown", handleClickOutside); 
+      return () => document.removeEventListener("mousedown", handleClickOutside); 
   }, []);
 
   return (
     <nav className="bg-gradient-to-r from-primary-900 to-primary-700 text-white shadow-lg sticky top-0 z-50 backdrop-blur-sm bg-opacity-95">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          <div className="flex items-center gap-2">
-            <Link to="/" className="text-2xl font-bold font-sans flex items-center gap-2 hover:opacity-90 transition-opacity">
-               <span className="text-3xl">✨</span> 
-               <span>حجزي - Hajzi</span>
-            </Link>
-          </div>
-          <div className="hidden md:block">
-            <div className="ml-10 flex items-center space-x-4 space-x-reverse">
-              {userProfile ? (
-                <>
-                  <div className="relative" ref={notifRef}>
-                      <button onClick={() => setIsNotifOpen(!isNotifOpen)} className="p-2 rounded-full hover:bg-white/10 relative transition-colors">
-                          <BellIcon className="w-6 h-6 text-primary-100" />
-                          {unreadCount > 0 && <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full text-[10px] flex items-center justify-center border border-primary-900 animate-pulse">{unreadCount}</span>}
-                      </button>
-                      {isNotifOpen && (
-                          <div className="absolute left-0 mt-2 w-80 bg-white rounded-xl shadow-2xl py-2 text-gray-800 z-50 overflow-hidden border border-gray-100 animate-slide-up">
-                              <div className="px-4 py-2 border-b border-gray-100 flex justify-between items-center bg-gray-50"><h3 className="font-bold text-sm">الإشعارات</h3><span className="text-xs text-gray-500">{unreadCount} جديد</span></div>
-                              <div className="max-h-80 overflow-y-auto scrollbar-thin">
-                                  {notifications.length === 0 ? <div className="p-8 text-center text-gray-400 text-sm">لا توجد إشعارات حالياً</div> : notifications.map(notif => (
-                                      <div key={notif.id} onClick={() => markAsRead(notif.id)} className={`px-4 py-3 border-b border-gray-50 hover:bg-primary-50 cursor-pointer transition-colors ${!notif.read ? 'bg-blue-50/50' : ''}`}>
-                                          <div className="flex justify-between items-start"><p className={`text-sm ${!notif.read ? 'font-bold text-primary-800' : 'text-gray-700'}`}>{notif.title}</p><span className="text-[10px] text-gray-400">{new Date(notif.createdAt).toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'})}</span></div>
-                                          <p className="text-xs text-gray-500 mt-1 line-clamp-2">{notif.body}</p>
-                                      </div>
-                                  ))}
-                              </div>
-                          </div>
-                      )}
-                  </div>
-                  <div className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full border border-white/20">
-                    <UserGroupIcon className="w-5 h-5 text-primary-200" />
-                    <span className="text-sm font-medium">{userProfile.name}</span>
-                  </div>
-                  {userProfile.role === 'provider' && (
-                    <>
-                      <Link to="/provider/dashboard" className="nav-link">لوحة التحكم</Link>
-                      <Link to="/provider/catalog" className="nav-link">الكتالوج</Link>
-                      <Link to="/provider/offers" className="nav-link">العروض</Link>
-                      <Link to="/provider/reservations" className="nav-link">الحجوزات</Link>
-                    </>
-                  )}
-                  {userProfile.role === 'customer' && (
-                    <>
-                      <Link to="/" className="nav-link">العروض اليومية</Link>
-                      <Link to="/providers" className="nav-link">مقدمو الخدمة</Link>
-                      <Link to="/my-reservations" className="nav-link">حجوزاتي</Link>
-                    </>
-                  )}
-                  <button onClick={logout} className="bg-red-500/80 hover:bg-red-600 text-white p-2 rounded-full transition-colors" title="تسجيل الخروج"><ArrowRightOnRectangleIcon className="h-5 w-5" /></button>
-                </>
-              ) : (
-                <>
-                  <Link to="/login" className="nav-link">دخول</Link>
-                  <Link to="/register" className="bg-white text-primary-800 hover:bg-primary-50 px-4 py-2 rounded-lg font-bold transition-all shadow-md transform hover:-translate-y-0.5">حساب جديد</Link>
-                </>
-              )}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+                <div className="flex items-center gap-2">
+                    <Link to="/" className="text-2xl font-bold font-sans flex items-center gap-2 hover:opacity-90 transition-opacity">
+                        <span className="text-3xl">✨</span><span>حجزي - Hajzi</span>
+                    </Link>
+                </div>
+                <div className="hidden md:block">
+                    <div className="ml-10 flex items-center space-x-4 space-x-reverse">
+                        {userProfile ? (
+                            <>
+                                <div className="relative" ref={notifRef}>
+                                    <button onClick={() => setIsNotifOpen(!isNotifOpen)} className="p-2 rounded-full hover:bg-white/10 relative transition-colors">
+                                        <BellIcon className="w-6 h-6 text-primary-100" />
+                                        {unreadCount > 0 && <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full text-[10px] flex items-center justify-center border border-primary-900 animate-pulse">{unreadCount}</span>}
+                                    </button>
+                                    {isNotifOpen && (
+                                        <div className="absolute left-0 mt-2 w-80 bg-white rounded-xl shadow-2xl py-2 text-gray-800 z-50 overflow-hidden border border-gray-100 animate-slide-up">
+                                            <div className="px-4 py-2 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                                                <h3 className="font-bold text-sm">الإشعارات</h3>
+                                                <span className="text-xs text-gray-500">{unreadCount} جديد</span>
+                                            </div>
+                                            <div className="max-h-80 overflow-y-auto scrollbar-thin">
+                                                {notifications.length === 0 ? <div className="p-8 text-center text-gray-400 text-sm">لا توجد إشعارات حالياً</div> : notifications.map(notif => (
+                                                    <div key={notif.id} onClick={() => markAsRead(notif.id)} className={`px-4 py-3 border-b border-gray-50 hover:bg-primary-50 cursor-pointer transition-colors ${!notif.read ? 'bg-blue-50/50' : ''}`}>
+                                                        <div className="flex justify-between items-start">
+                                                            <p className={`text-sm ${!notif.read ? 'font-bold text-primary-800' : 'text-gray-700'}`}>{notif.title}</p>
+                                                            <span className="text-[10px] text-gray-400">{new Date(notif.createdAt).toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'})}</span>
+                                                        </div>
+                                                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{notif.body}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full border border-white/20">
+                                    <UserGroupIcon className="w-5 h-5 text-primary-200" />
+                                    <span className="text-sm font-medium">{userProfile.name}</span>
+                                </div>
+                                {userProfile.role === 'provider' && (
+                                    <>
+                                        <Link to="/provider/dashboard" className="nav-link">لوحة التحكم</Link>
+                                        <Link to="/provider/catalog" className="nav-link">الكتالوج</Link>
+                                        <Link to="/provider/offers" className="nav-link">العروض</Link>
+                                        <Link to="/provider/reservations" className="nav-link">الحجوزات</Link>
+                                    </>
+                                )}
+                                {userProfile.role === 'customer' && (
+                                    <>
+                                        <Link to="/" className="nav-link">العروض اليومية</Link>
+                                        <Link to="/providers" className="nav-link">مقدمو الخدمة</Link>
+                                        <Link to="/my-reservations" className="nav-link">حجوزاتي</Link>
+                                    </>
+                                )}
+                                <button onClick={logout} className="bg-red-500/80 hover:bg-red-600 text-white p-2 rounded-full transition-colors" title="تسجيل الخروج">
+                                    <ArrowRightOnRectangleIcon className="h-5 w-5" />
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <Link to="/login" className="nav-link">دخول</Link>
+                                <Link to="/register" className="bg-white text-primary-800 hover:bg-primary-50 px-4 py-2 rounded-lg font-bold transition-all shadow-md transform hover:-translate-y-0.5">حساب جديد</Link>
+                            </>
+                        )}
+                    </div>
+                </div>
+                <div className="-mr-2 flex md:hidden gap-2">
+                    {userProfile && (
+                        <button onClick={() => setIsNotifOpen(!isNotifOpen)} className="p-2 relative">
+                            <BellIcon className="h-6 w-6 text-gray-200" />
+                            {unreadCount > 0 && <span className="absolute top-1 right-1 w-3 h-3 bg-red-500 rounded-full"></span>}
+                        </button>
+                    )}
+                    <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="bg-primary-800 p-2 rounded-md text-gray-200 hover:text-white focus:outline-none">
+                        {isMenuOpen ? <XMarkIcon className="h-6 w-6" /> : <Bars3Icon className="h-6 w-6" />}
+                    </button>
+                </div>
             </div>
-          </div>
-          <div className="-mr-2 flex md:hidden gap-2">
-            {userProfile && <button onClick={() => setIsNotifOpen(!isNotifOpen)} className="p-2 relative"><BellIcon className="h-6 w-6 text-gray-200" />{unreadCount > 0 && <span className="absolute top-1 right-1 w-3 h-3 bg-red-500 rounded-full"></span>}</button>}
-            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="bg-primary-800 p-2 rounded-md text-gray-200 hover:text-white focus:outline-none">{isMenuOpen ? <XMarkIcon className="h-6 w-6" /> : <Bars3Icon className="h-6 w-6" />}</button>
-          </div>
         </div>
-      </div>
-      {isNotifOpen && (
-         <div className="md:hidden bg-white text-gray-800 max-h-60 overflow-y-auto border-t border-b border-gray-200">
-             {notifications.length === 0 && <div className="p-4 text-center text-sm text-gray-400">لا توجد إشعارات</div>}
-             {notifications.map(n => (<div key={n.id} onClick={() => markAsRead(n.id)} className={`p-3 border-b border-gray-100 ${!n.read ? 'bg-blue-50' : ''}`}><div className="font-bold text-sm">{n.title}</div><div className="text-xs text-gray-600">{n.body}</div></div>))}
-         </div>
-      )}
-      {isMenuOpen && (
-        <div className="md:hidden bg-primary-800 border-t border-primary-700 animate-fade-in">
-          <div className="px-4 pt-2 pb-6 space-y-2">
-             {userProfile ? (
-                <>
-                  <div className="text-primary-200 px-3 py-3 border-b border-primary-700 mb-2">مرحباً، {userProfile.name}</div>
-                  {userProfile.role === 'provider' && (<><Link to="/provider/dashboard" className="block mobile-nav-link">لوحة التحكم</Link><Link to="/provider/catalog" className="block mobile-nav-link">الكتالوج</Link><Link to="/provider/offers" className="block mobile-nav-link">العروض</Link><Link to="/provider/reservations" className="block mobile-nav-link">الحجوزات</Link></>)}
-                  {userProfile.role === 'customer' && (<><Link to="/" className="block mobile-nav-link">العروض اليومية</Link><Link to="/providers" className="block mobile-nav-link">مقدمو الخدمة</Link><Link to="/my-reservations" className="block mobile-nav-link">حجوزاتي</Link></>)}
-                  <button onClick={logout} className="w-full text-right block bg-red-600/90 text-white px-3 py-3 rounded-md mt-4">تسجيل خروج</button>
-                </>
-              ) : (
-                <><Link to="/login" className="block mobile-nav-link">دخول</Link><Link to="/register" className="block bg-primary-500 text-white px-3 py-3 rounded-md mt-2 font-bold">حساب جديد</Link></>
-              )}
-          </div>
-        </div>
-      )}
+        {isNotifOpen && (
+            <div className="md:hidden bg-white text-gray-800 max-h-60 overflow-y-auto border-t border-b border-gray-200">
+                {notifications.length === 0 && <div className="p-4 text-center text-sm text-gray-400">لا توجد إشعارات</div>}
+                {notifications.map(n => (
+                    <div key={n.id} onClick={() => markAsRead(n.id)} className={`p-3 border-b border-gray-100 ${!n.read ? 'bg-blue-50' : ''}`}>
+                        <div className="font-bold text-sm">{n.title}</div>
+                        <div className="text-xs text-gray-600">{n.body}</div>
+                    </div>
+                ))}
+            </div>
+        )}
+        {isMenuOpen && (
+            <div className="md:hidden bg-primary-800 border-t border-primary-700 animate-fade-in">
+                <div className="px-4 pt-2 pb-6 space-y-2">
+                    {userProfile ? (
+                        <>
+                            <div className="text-primary-200 px-3 py-3 border-b border-primary-700 mb-2">مرحباً، {userProfile.name}</div>
+                            {userProfile.role === 'provider' && (
+                                <>
+                                    <Link to="/provider/dashboard" className="block mobile-nav-link">لوحة التحكم</Link>
+                                    <Link to="/provider/catalog" className="block mobile-nav-link">الكتالوج</Link>
+                                    <Link to="/provider/offers" className="block mobile-nav-link">العروض</Link>
+                                    <Link to="/provider/reservations" className="block mobile-nav-link">الحجوزات</Link>
+                                </>
+                            )}
+                            {userProfile.role === 'customer' && (
+                                <>
+                                    <Link to="/" className="block mobile-nav-link">العروض اليومية</Link>
+                                    <Link to="/providers" className="block mobile-nav-link">مقدمو الخدمة</Link>
+                                    <Link to="/my-reservations" className="block mobile-nav-link">حجوزاتي</Link>
+                                </>
+                            )}
+                            <button onClick={logout} className="w-full text-right block bg-red-600/90 text-white px-3 py-3 rounded-md mt-4">تسجيل خروج</button>
+                        </>
+                    ) : (
+                        <>
+                            <Link to="/login" className="block mobile-nav-link">دخول</Link>
+                            <Link to="/register" className="block bg-primary-500 text-white px-3 py-3 rounded-md mt-2 font-bold">حساب جديد</Link>
+                        </>
+                    )}
+                </div>
+            </div>
+        )}
     </nav>
   );
 };
 
-// ... [Login Unchanged] ...
 const Login = () => {
-  const [identifier, setIdentifier] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const { showToast } = useContext(ToastContext);
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      let emailToUse = identifier;
-      const isEmail = identifier.includes('@');
-      if (!isEmail) { emailToUse = `${identifier}@seacatch.local`; }
-      await signInWithEmailAndPassword(auth, emailToUse, password);
-      showToast('تم تسجيل الدخول بنجاح', 'success');
-      window.location.hash = '/';
-    } catch (err: any) {
-      console.error(err);
-      let msg = "حدث خطأ أثناء تسجيل الدخول";
-      if (err.code === 'auth/invalid-credential') msg = "البيانات غير صحيحة";
-      showToast(msg, 'error');
-    }
-    setLoading(false);
-  };
-  return (
-    <div className="min-h-[calc(100vh-64px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
-      <Card className="max-w-md w-full p-8 space-y-8 animate-slide-up border-t-4 border-t-primary-500">
-        <div><h2 className="mt-2 text-center text-3xl font-extrabold text-primary-900">تسجيل الدخول</h2></div>
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-          <div className="rounded-md shadow-sm -space-y-px">
-            <input type="text" required className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm" placeholder="البريد الإلكتروني أو رقم الجوال" value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
-            <input type="password" required className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm" placeholder="كلمة المرور" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </div>
-          <Button type="submit" isLoading={loading} className="w-full py-3">دخول</Button>
-          <div className="text-sm text-center"><Link to="/register" className="font-medium text-primary-600 hover:text-primary-500 transition-colors">ليس لديك حساب؟ <span className="underline">سجل الآن</span></Link></div>
-        </form>
-      </Card>
-    </div>
-  );
+    const [identifier, setIdentifier] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const { showToast } = useContext(ToastContext);
+
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            let emailToUse = identifier;
+            if (!identifier.includes('@')) {
+                emailToUse = `${identifier}@seacatch.local`;
+            }
+            await signInWithEmailAndPassword(auth, emailToUse, password);
+            showToast('تم تسجيل الدخول بنجاح', 'success');
+            window.location.hash = '/';
+        } catch (err: any) {
+            console.error(err);
+            let msg = "حدث خطأ أثناء تسجيل الدخول";
+            if (err.code === 'auth/invalid-credential') msg = "البيانات غير صحيحة";
+            showToast(msg, 'error');
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div className="min-h-[calc(100vh-64px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
+            <Card className="max-w-md w-full p-8 space-y-8 animate-slide-up border-t-4 border-t-primary-500">
+                <div><h2 className="mt-2 text-center text-3xl font-extrabold text-primary-900">تسجيل الدخول</h2></div>
+                <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+                    <div className="rounded-md shadow-sm -space-y-px">
+                        <input type="text" required className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm" placeholder="البريد الإلكتروني أو رقم الجوال" value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
+                        <input type="password" required className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm" placeholder="كلمة المرور" value={password} onChange={(e) => setPassword(e.target.value)} />
+                    </div>
+                    <Button type="submit" isLoading={loading} className="w-full py-3">دخول</Button>
+                    <div className="text-sm text-center"><Link to="/register" className="font-medium text-primary-600 hover:text-primary-500 transition-colors">ليس لديك حساب؟ <span className="underline">سجل الآن</span></Link></div>
+                </form>
+            </Card>
+        </div>
+    );
 };
 
 const Register = () => {
-  const [formData, setFormData] = useState({ name: '', contact: '', password: '', role: 'customer' as UserRole, providerCode: '', category: 'مطعم' as ProviderCategory });
-  const [loading, setLoading] = useState(false);
-  const { showToast } = useContext(ToastContext);
+    const [formData, setFormData] = useState({ name: '', contact: '', password: '', role: 'customer' as UserRole, providerCode: '', category: 'مطعم' as ProviderCategory });
+    const [loading, setLoading] = useState(false);
+    const { showToast } = useContext(ToastContext);
+    const providerCategories: ProviderCategory[] = ['مطعم', 'مقهى', 'ملابس', 'إلكترونيات', 'خدمات', 'أخرى'];
 
-  const providerCategories: ProviderCategory[] = ['مطعم', 'مقهى', 'ملابس', 'إلكترونيات', 'خدمات', 'أخرى'];
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (formData.role === 'provider' && formData.providerCode !== '356751') { showToast("رمز التحقق لمقدم الخدمة غير صحيح", 'error'); return; }
-    setLoading(true);
-    let userToDelete: User | null = null;
-    try {
-      let emailToRegister = formData.contact;
-      let phoneToStore = '';
-      const isEmail = formData.contact.includes('@');
-      if (!isEmail) { phoneToStore = formData.contact; emailToRegister = `${formData.contact}@seacatch.local`; }
-      const userCredential = await createUserWithEmailAndPassword(auth, emailToRegister, formData.password);
-      userToDelete = userCredential.user;
-      const newUser: UserProfile = { uid: userCredential.user.uid, name: formData.name, email: emailToRegister, role: formData.role, phone: phoneToStore, createdAt: Date.now() };
-      await setDoc(doc(db, 'users', userCredential.user.uid), newUser);
-      
-      if (formData.role === 'provider') {
-        const newProvider: ProviderProfile = { 
-            providerId: userCredential.user.uid, 
-            name: formData.name, 
-            description: `يقدم أفضل ${formData.category === 'مطعم' ? 'المأكولات' : 'الخدمات والمنتجات'}`,
-            category: formData.category, 
-            followersCount: 0 
+    const handleRegister = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (formData.role === 'provider' && formData.providerCode !== '356751') {
+            showToast("رمز التحقق لمقدم الخدمة غير صحيح", 'error');
+            return;
         }
-        await setDoc(doc(db, 'providers', userCredential.user.uid), newProvider);
-      }
-      showToast('تم إنشاء الحساب بنجاح', 'success');
-      window.location.hash = '/';
-    } catch (err: any) {
-      console.error(err);
-      let msg = "فشل التسجيل";
-      if (err.code === 'auth/email-already-in-use') msg = "الحساب مسجل مسبقاً";
-      showToast(msg, 'error');
-      if (userToDelete) try { await deleteUser(userToDelete); } catch {}
-    }
-    setLoading(false);
-  };
-  return (
-    <div className="min-h-[calc(100vh-64px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
-      <Card className="max-w-md w-full p-8 space-y-8 animate-slide-up border-t-4 border-t-primary-500">
-        <div><h2 className="mt-2 text-center text-3xl font-extrabold text-primary-900">حساب جديد</h2></div>
-        <form className="mt-8 space-y-4" onSubmit={handleRegister}>
-          <div className="space-y-3">
-            <input type="text" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none" placeholder="الاسم الكامل / اسم المتجر" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
-            <input type="text" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none" placeholder="البريد الإلكتروني أو رقم الجوال" value={formData.contact} onChange={(e) => setFormData({...formData, contact: e.target.value})} />
-            <input type="password" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none" placeholder="كلمة المرور (6 أحرف على الأقل)" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
-          </div>
-          <div className="grid grid-cols-2 gap-4 mt-4">
-            <div onClick={() => setFormData({...formData, role: 'customer'})} className={`cursor-pointer p-4 rounded-lg border-2 text-center transition-all ${formData.role === 'customer' ? 'border-primary-600 bg-primary-50 text-primary-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-primary-300'}`}><div>🍽️</div><div className="text-sm mt-1">عميل</div></div>
-            <div onClick={() => setFormData({...formData, role: 'provider'})} className={`cursor-pointer p-4 rounded-lg border-2 text-center transition-all ${formData.role === 'provider' ? 'border-primary-600 bg-primary-50 text-primary-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-primary-300'}`}><div>👨‍🍳</div><div className="text-sm mt-1">مقدم خدمة</div></div>
-          </div>
-          
-          {formData.role === 'provider' && (
-              <div className="animate-fade-in space-y-3 mt-4">
-                  <div>
-                      <label className="text-sm text-gray-600 block mb-1">نوع النشاط</label>
-                      <select className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white" value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value as ProviderCategory})}>
-                          {providerCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                  </div>
-                  <div>
-                      <label className="text-sm text-gray-600 block mb-1">رمز التحقق (للمتاجر فقط)</label>
-                      <input type="password" required className="block w-full px-3 py-3 border border-red-200 bg-red-50 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none text-center tracking-widest" placeholder="أدخل الرمز السري" value={formData.providerCode} onChange={(e) => setFormData({...formData, providerCode: e.target.value})} />
-                  </div>
-              </div>
-          )}
-          <Button type="submit" isLoading={loading} className="w-full py-3 mt-6">تسجيل</Button>
-          <div className="text-sm text-center"><Link to="/login" className="font-medium text-primary-600 hover:text-primary-500">لديك حساب؟ سجل دخول</Link></div>
-        </form>
-      </Card>
-    </div>
-  );
-};
-
-// ... [ProviderDashboard unchanged logic, updated icons/colors only] ...
-const ProviderDashboard = () => {
-  const { userProfile } = useContext(AuthContext);
-  const [stats, setStats] = useState({ items: 0, offers: 0, reservations: 0, revenue: 0, followers: 0 });
-
-  useEffect(() => {
-    const fetchStats = async () => {
-        if (!userProfile) return;
+        setLoading(true);
+        let userToDelete: User | null = null;
         try {
-            const itemsSnap = await getDocs(query(collection(db, 'catalogItems'), where('providerId', '==', userProfile.uid)));
-            const offersSnap = await getDocs(query(collection(db, 'offerings'), where('providerId', '==', userProfile.uid), where('isActive', '==', true)));
-            const resSnap = await getDocs(query(collection(db, 'reservations'), where('providerId', '==', userProfile.uid)));
-            let rev = 0;
-            resSnap.forEach(doc => { const data = doc.data() as Reservation; if(data.status === 'completed') rev += data.totalPrice; });
-            setStats({ items: itemsSnap.size, offers: offersSnap.size, reservations: resSnap.size, revenue: rev, followers: 0 });
-        } catch (e) { console.error(e); }
+            let emailToRegister = formData.contact;
+            let phoneToStore = '';
+            if (!formData.contact.includes('@')) {
+                phoneToStore = formData.contact;
+                emailToRegister = `${formData.contact}@seacatch.local`;
+            }
+            const userCredential = await createUserWithEmailAndPassword(auth, emailToRegister, formData.password);
+            userToDelete = userCredential.user;
+            const newUser: UserProfile = { uid: userCredential.user.uid, name: formData.name, email: emailToRegister, role: formData.role, phone: phoneToStore, createdAt: Date.now() };
+            await setDoc(doc(db, 'users', userCredential.user.uid), newUser);
+            if (formData.role === 'provider') {
+                const newProvider: ProviderProfile = { providerId: userCredential.user.uid, name: formData.name, description: `يقدم أفضل ${formData.category === 'مطعم' ? 'المأكولات' : 'الخدمات والمنتجات'}`, category: formData.category, followersCount: 0 };
+                await setDoc(doc(db, 'providers', userCredential.user.uid), newProvider);
+            }
+            showToast('تم إنشاء الحساب بنجاح', 'success');
+            window.location.hash = '/';
+        } catch (err: any) {
+            console.error(err);
+            let msg = "فشل التسجيل";
+            if (err.code === 'auth/email-already-in-use') msg = "الحساب مسجل مسبقاً";
+            showToast(msg, 'error');
+            if (userToDelete) try { await deleteUser(userToDelete); } catch {}
+        }
+        setLoading(false);
     };
-    fetchStats();
-  }, [userProfile]);
 
-  const StatCard = ({ title, value, color, icon }: any) => (
-      <Card className={`p-6 flex items-center justify-between border-l-4 overflow-hidden relative group hover:-translate-y-1 transition-transform`} style={{ borderLeftColor: color }}>
-        <div className="relative z-10">
-            <p className="text-gray-500 text-sm font-medium mb-1">{title}</p>
-            <h3 className="text-4xl font-extrabold text-gray-800 tracking-tight">{value}</h3>
+    return (
+        <div className="min-h-[calc(100vh-64px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
+            <Card className="max-w-md w-full p-8 space-y-8 animate-slide-up border-t-4 border-t-primary-500">
+                <div><h2 className="mt-2 text-center text-3xl font-extrabold text-primary-900">حساب جديد</h2></div>
+                <form className="mt-8 space-y-4" onSubmit={handleRegister}>
+                    <div className="space-y-3">
+                        <input type="text" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none" placeholder="الاسم الكامل / اسم المتجر" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+                        <input type="text" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none" placeholder="البريد الإلكتروني أو رقم الجوال" value={formData.contact} onChange={(e) => setFormData({...formData, contact: e.target.value})} />
+                        <input type="password" required className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none" placeholder="كلمة المرور (6 أحرف على الأقل)" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                        <div onClick={() => setFormData({...formData, role: 'customer'})} className={`cursor-pointer p-4 rounded-lg border-2 text-center transition-all ${formData.role === 'customer' ? 'border-primary-600 bg-primary-50 text-primary-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-primary-300'}`}><div>🍽️</div><div className="text-sm mt-1">عميل</div></div>
+                        <div onClick={() => setFormData({...formData, role: 'provider'})} className={`cursor-pointer p-4 rounded-lg border-2 text-center transition-all ${formData.role === 'provider' ? 'border-primary-600 bg-primary-50 text-primary-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-primary-300'}`}><div>👨‍🍳</div><div className="text-sm mt-1">مقدم خدمة</div></div>
+                    </div>
+                    {formData.role === 'provider' && (
+                        <div className="animate-fade-in space-y-3 mt-4">
+                            <div><label className="text-sm text-gray-600 block mb-1">نوع النشاط</label><select className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white" value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value as ProviderCategory})}>{providerCategories.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                            <div><label className="text-sm text-gray-600 block mb-1">رمز التحقق (للمتاجر فقط)</label><input type="password" required className="block w-full px-3 py-3 border border-red-200 bg-red-50 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none text-center tracking-widest" placeholder="أدخل الرمز السري" value={formData.providerCode} onChange={(e) => setFormData({...formData, providerCode: e.target.value})} /></div>
+                        </div>
+                    )}
+                    <Button type="submit" isLoading={loading} className="w-full py-3 mt-6">تسجيل</Button>
+                    <div className="text-sm text-center"><Link to="/login" className="font-medium text-primary-600 hover:text-primary-500">لديك حساب؟ سجل دخول</Link></div>
+                </form>
+            </Card>
         </div>
-        <div className={`p-4 rounded-xl text-white shadow-lg relative z-10`} style={{background: color}}>{icon}</div>
-      </Card>
-  );
-
-  return (
-    <div className="p-6 max-w-7xl mx-auto space-y-8">
-      <div><h1 className="text-3xl font-bold text-gray-800">لوحة التحكم</h1><p className="text-gray-500 mt-2">نظرة عامة على نشاطك اليوم</p></div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="الأصناف / الخدمات" value={stats.items} color="#6366f1" icon={<ShoppingBagIcon className="w-6 h-6"/>} />
-        <StatCard title="العروض النشطة" value={stats.offers} color="#10b981" icon={<CalendarIcon className="w-6 h-6"/>} />
-        <StatCard title="إجمالي الحجوزات" value={stats.reservations} color="#f59e0b" icon={<ClipboardDocumentCheckIcon className="w-6 h-6"/>} />
-        <StatCard title="الإيرادات" value={`${stats.revenue.toLocaleString()}`} color="#8b5cf6" icon={<CurrencyDollarIcon className="w-6 h-6"/>} />
-      </div>
-    </div>
-  );
+    );
 };
 
-// ... [ProviderReservations logic unchanged, updated colors] ...
+const ProviderDashboard = () => {
+    const { userProfile } = useContext(AuthContext);
+    const [stats, setStats] = useState({ items: 0, offers: 0, reservations: 0, revenue: 0, followers: 0 });
+    
+    useEffect(() => {
+        const fetchStats = async () => {
+            if (!userProfile) return;
+            try {
+                const itemsSnap = await getDocs(query(collection(db, 'catalogItems'), where('providerId', '==', userProfile.uid)));
+                const offersSnap = await getDocs(query(collection(db, 'offerings'), where('providerId', '==', userProfile.uid), where('isActive', '==', true)));
+                const resSnap = await getDocs(query(collection(db, 'reservations'), where('providerId', '==', userProfile.uid)));
+                let rev = 0;
+                resSnap.forEach(doc => {
+                    const data = doc.data() as Reservation;
+                    if(data.status === 'completed') rev += data.totalPrice;
+                });
+                setStats({ items: itemsSnap.size, offers: offersSnap.size, reservations: resSnap.size, revenue: rev, followers: 0 });
+            } catch (e) { console.error(e); }
+        };
+        fetchStats();
+    }, [userProfile]);
+
+    const StatCard = ({ title, value, color, icon }: any) => (
+        <Card className={`p-6 flex items-center justify-between border-l-4 overflow-hidden relative group hover:-translate-y-1 transition-transform`} style={{ borderLeftColor: color }}>
+            <div className="relative z-10">
+                <p className="text-gray-500 text-sm font-medium mb-1">{title}</p>
+                <h3 className="text-4xl font-extrabold text-gray-800 tracking-tight">{value}</h3>
+            </div>
+            <div className={`p-4 rounded-xl text-white shadow-lg relative z-10`} style={{background: color}}>{icon}</div>
+        </Card>
+    );
+
+    return (
+        <div className="p-6 max-w-7xl mx-auto space-y-8">
+            <div><h1 className="text-3xl font-bold text-gray-800">لوحة التحكم</h1><p className="text-gray-500 mt-2">نظرة عامة على نشاطك اليوم</p></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <StatCard title="الأصناف / الخدمات" value={stats.items} color="#6366f1" icon={<ShoppingBagIcon className="w-6 h-6"/>} />
+                <StatCard title="العروض النشطة" value={stats.offers} color="#10b981" icon={<CalendarIcon className="w-6 h-6"/>} />
+                <StatCard title="إجمالي الحجوزات" value={stats.reservations} color="#f59e0b" icon={<ClipboardDocumentCheckIcon className="w-6 h-6"/>} />
+                <StatCard title="الإيرادات" value={`${stats.revenue.toLocaleString()}`} color="#8b5cf6" icon={<CurrencyDollarIcon className="w-6 h-6"/>} />
+            </div>
+        </div>
+    );
+};
+
 const ProviderReservations = () => {
     const { userProfile } = useContext(AuthContext);
     const { showToast } = useContext(ToastContext);
@@ -621,8 +686,18 @@ const ProviderReservations = () => {
         return { total, pending, confirmed, revenue, itemCounts };
     }, [filteredReservations]);
 
-    const toggleSelect = (id: string) => { if(statusFilter === 'all') return; const newSet = new Set(selectedIds); if (newSet.has(id)) newSet.delete(id); else newSet.add(id); setSelectedIds(newSet); };
-    const toggleSelectAll = () => { if(statusFilter === 'all') return; if (selectedIds.size === filteredReservations.length) setSelectedIds(new Set()); else setSelectedIds(new Set(filteredReservations.map(r => r.id))); };
+    const toggleSelect = (id: string) => {
+        if(statusFilter === 'all') return;
+        const newSet = new Set(selectedIds);
+        if (newSet.has(id)) newSet.delete(id); else newSet.add(id);
+        setSelectedIds(newSet);
+    };
+
+    const toggleSelectAll = () => {
+        if(statusFilter === 'all') return;
+        if (selectedIds.size === filteredReservations.length) setSelectedIds(new Set());
+        else setSelectedIds(new Set(filteredReservations.map(r => r.id)));
+    };
 
     const handleBulkAction = async () => {
         if(!confirm(`هل أنت متأكد من تحديث حالة ${selectedIds.size} حجوزات؟`)) return;
@@ -634,7 +709,12 @@ const ProviderReservations = () => {
             const res = reservations.find(r => r.id === id);
             if(res) sendNotification(res.customerId, 'تحديث الحجز', `تم تغيير حالة حجزك ${res.offeringName} إلى ${newStatus === 'confirmed' ? 'مؤكد' : 'مكتمل'}`);
         });
-        try { await batch.commit(); showToast("تم التحديث بنجاح", "success"); setSelectedIds(new Set()); fetchReservations(); } catch(e) { showToast("حدث خطأ", "error"); }
+        try {
+            await batch.commit();
+            showToast("تم التحديث بنجاح", "success");
+            setSelectedIds(new Set());
+            fetchReservations();
+        } catch(e) { showToast("حدث خطأ", "error"); }
     };
 
     const handleSingleStatus = async (id: string, status: ReservationStatus) => {
@@ -665,82 +745,92 @@ const ProviderReservations = () => {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div><h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><ClipboardDocumentCheckIcon className="w-8 h-8 text-primary-600"/> إدارة الحجوزات</h1></div>
                 <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-gray-200">
-                    <CalendarDaysIcon className="w-5 h-5 text-gray-400" /><input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="text-sm border-none focus:ring-0 text-gray-600 font-medium outline-none" /><span className="text-gray-400">-</span><input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="text-sm border-none focus:ring-0 text-gray-600 font-medium outline-none" />
+                    <CalendarDaysIcon className="w-5 h-5 text-gray-400" />
+                    <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="text-sm border-none focus:ring-0 text-gray-600 font-medium outline-none" /><span className="text-gray-400">-</span><input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="text-sm border-none focus:ring-0 text-gray-600 font-medium outline-none" />
                 </div>
             </div>
             {loading ? <div className="grid gap-4"><SkeletonCard /><SkeletonCard /></div> : (
                 <>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-primary-500"><p className="text-xs text-gray-500 font-bold mb-1">العدد</p><p className="text-2xl font-bold text-gray-800">{stats.total}</p></div>
-                    <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-yellow-500"><p className="text-xs text-gray-500 font-bold mb-1">معلق</p><p className="text-2xl font-bold text-yellow-600">{stats.pending}</p></div>
-                    <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-green-500"><p className="text-xs text-gray-500 font-bold mb-1">مؤكد</p><p className="text-2xl font-bold text-green-600">{stats.confirmed}</p></div>
-                    <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-purple-500"><p className="text-xs text-gray-500 font-bold mb-1">الإيرادات</p><p className="text-2xl font-bold text-purple-600">{stats.revenue.toLocaleString()}</p></div>
-                </div>
-                {Object.keys(stats.itemCounts).length > 0 && <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{Object.entries(stats.itemCounts).map(([name, count]) => (<div key={name} className="flex-shrink-0 bg-white px-3 py-1 rounded-full border border-gray-200 shadow-sm flex items-center gap-2 text-sm"><span className="text-gray-600 font-medium">{name}</span><span className="bg-primary-100 text-primary-700 px-2 rounded-full font-bold text-xs">{count}</span></div>))}</div>}
-                
-                <Card className="p-4 flex flex-col lg:flex-row gap-4 justify-between items-center sticky top-20 z-40 shadow-md">
-                    <div className="flex flex-1 w-full gap-4 flex-col sm:flex-row">
-                        <div className="relative flex-1"><MagnifyingGlassIcon className="absolute right-3 top-3 w-5 h-5 text-gray-400" /><input type="text" placeholder="بحث..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pr-10 pl-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" /></div>
-                        <div className="flex bg-gray-100 p-1 rounded-lg overflow-x-auto">{['all', 'pending', 'confirmed', 'completed', 'cancelled'].map(st => (<button key={st} onClick={() => { setStatusFilter(st); setSelectedIds(new Set()); }} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${statusFilter === st ? 'bg-white shadow text-primary-700' : 'text-gray-500 hover:text-gray-700'}`}>{st === 'all' ? 'الكل' : st}</button>))}</div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-primary-500"><p className="text-xs text-gray-500 font-bold mb-1">العدد</p><p className="text-2xl font-bold text-gray-800">{stats.total}</p></div>
+                        <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-yellow-500"><p className="text-xs text-gray-500 font-bold mb-1">معلق</p><p className="text-2xl font-bold text-yellow-600">{stats.pending}</p></div>
+                        <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-green-500"><p className="text-xs text-gray-500 font-bold mb-1">مؤكد</p><p className="text-2xl font-bold text-green-600">{stats.confirmed}</p></div>
+                        <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-purple-500"><p className="text-xs text-gray-500 font-bold mb-1">الإيرادات</p><p className="text-2xl font-bold text-purple-600">{stats.revenue.toLocaleString()}</p></div>
                     </div>
-                    <div className="flex items-center gap-2 border-r pr-4 border-gray-200"><button onClick={() => setGroupBy('none')} className={`p-2 rounded-lg ${groupBy === 'none' ? 'bg-primary-100 text-primary-700' : 'text-gray-400'}`}><TableCellsIcon className="w-6 h-6" /></button><button onClick={() => setGroupBy('customer')} className={`p-2 rounded-lg ${groupBy === 'customer' ? 'bg-primary-100 text-primary-700' : 'text-gray-400'}`}><UserIcon className="w-6 h-6" /></button><button onClick={() => setGroupBy('item')} className={`p-2 rounded-lg ${groupBy === 'item' ? 'bg-primary-100 text-primary-700' : 'text-gray-400'}`}><TagIcon className="w-6 h-6" /></button></div>
-                </Card>
-
-                {selectedIds.size > 0 && statusFilter !== 'all' && (
-                    <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-2xl z-50 flex items-center gap-4 animate-slide-up">
-                        <span className="font-bold text-sm bg-gray-700 px-2 py-0.5 rounded-md">{selectedIds.size}</span>
-                        <button onClick={handleBulkAction} className="hover:text-green-400 font-bold text-sm flex items-center gap-1">تنفيذ الإجراء</button>
-                        <button onClick={() => setSelectedIds(new Set())} className="text-gray-400 hover:text-white"><XMarkIcon className="w-5 h-5"/></button>
-                    </div>
-                )}
-
-                {filteredReservations.length === 0 ? <div className="text-center py-20 bg-white rounded-2xl shadow-sm border border-dashed border-gray-300"><div className="text-6xl mb-4">📭</div><h3 className="text-xl font-bold text-gray-700">لا توجد حجوزات</h3></div> : (
-                    <>
-                    {groupBy === 'none' && (
-                        <div className="space-y-4">
-                            {statusFilter !== 'all' && <div className="flex items-center gap-2 px-2 text-sm text-gray-500 font-medium"><input type="checkbox" onChange={toggleSelectAll} checked={selectedIds.size === filteredReservations.length && filteredReservations.length > 0} className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" /><span>تحديد الكل</span></div>}
-                            {filteredReservations.map(res => (
-                                <Card key={res.id} className={`p-4 flex flex-col md:flex-row items-center gap-4 transition-all ${selectedIds.has(res.id) ? 'ring-2 ring-primary-500 bg-primary-50' : 'hover:border-primary-300'}`}>
-                                    {statusFilter !== 'all' && (<input type="checkbox" checked={selectedIds.has(res.id)} onChange={() => toggleSelect(res.id)} className="w-5 h-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />)}
-                                    <div className="flex-1 w-full md:w-auto">
-                                        <div className="flex justify-between items-start"><div><h3 className="font-bold text-gray-900">{res.offeringName}</h3><p className="text-sm text-gray-500 flex items-center gap-1"><UserIcon className="w-3 h-3"/> {res.customerName}</p></div><Badge status={res.status} /></div>
-                                        <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-600"><span className="flex items-center gap-1"><ClockIcon className="w-4 h-4 text-gray-400"/> {new Date(res.createdAt).toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'})}</span><span className="flex items-center gap-1 font-bold text-primary-700"><CurrencyDollarIcon className="w-4 h-4"/> {res.totalPrice} ر.ي</span></div>
-                                        {res.paymentReference && <div className="mt-2 bg-green-50 text-green-800 text-xs px-2 py-1 rounded inline-flex items-center gap-1"><BanknotesIcon className="w-3 h-3"/> مرجع الدفع: {res.paymentReference}</div>}
-                                    </div>
-                                    <div className="flex items-center gap-2 w-full md:w-auto justify-end border-t md:border-t-0 pt-3 md:pt-0 mt-3 md:mt-0">
-                                        {res.status === 'pending' && (<><Button variant="ghost" onClick={() => handleSingleStatus(res.id, 'confirmed')} className="text-green-600 bg-green-50 hover:bg-green-100"><CheckCircleIcon className="w-5 h-5"/></Button><Button variant="ghost" onClick={() => handleSingleStatus(res.id, 'cancelled')} className="text-red-600 bg-red-50 hover:bg-red-100"><XCircleIcon className="w-5 h-5"/></Button></>)}
-                                        {res.status === 'confirmed' && (<Button variant="ghost" onClick={() => handleSingleStatus(res.id, 'completed')} className="text-blue-600 bg-blue-50 hover:bg-blue-100">إتمام</Button>)}
-                                    </div>
-                                </Card>
-                            ))}
+                    {Object.keys(stats.itemCounts).length > 0 && <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{Object.entries(stats.itemCounts).map(([name, count]) => (<div key={name} className="flex-shrink-0 bg-white px-3 py-1 rounded-full border border-gray-200 shadow-sm flex items-center gap-2 text-sm"><span className="text-gray-600 font-medium">{name}</span><span className="bg-primary-100 text-primary-700 px-2 rounded-full font-bold text-xs">{count}</span></div>))}</div>}
+                    <Card className="p-4 flex flex-col lg:flex-row gap-4 justify-between items-center sticky top-20 z-40 shadow-md">
+                        <div className="flex flex-1 w-full gap-4 flex-col sm:flex-row">
+                            <div className="relative flex-1"><MagnifyingGlassIcon className="absolute right-3 top-3 w-5 h-5 text-gray-400" /><input type="text" placeholder="بحث..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pr-10 pl-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" /></div>
+                            <div className="flex bg-gray-100 p-1 rounded-lg overflow-x-auto">{['all', 'pending', 'confirmed', 'completed', 'cancelled'].map(st => (<button key={st} onClick={() => { setStatusFilter(st); setSelectedIds(new Set()); }} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${statusFilter === st ? 'bg-white shadow text-primary-700' : 'text-gray-500 hover:text-gray-700'}`}>{st === 'all' ? 'الكل' : st}</button>))}</div>
+                        </div>
+                        <div className="flex items-center gap-2 border-r pr-4 border-gray-200">
+                            <button onClick={() => setGroupBy('none')} className={`p-2 rounded-lg ${groupBy === 'none' ? 'bg-primary-100 text-primary-700' : 'text-gray-400'}`}><TableCellsIcon className="w-6 h-6" /></button>
+                            <button onClick={() => setGroupBy('customer')} className={`p-2 rounded-lg ${groupBy === 'customer' ? 'bg-primary-100 text-primary-700' : 'text-gray-400'}`}><UserIcon className="w-6 h-6" /></button>
+                            <button onClick={() => setGroupBy('item')} className={`p-2 rounded-lg ${groupBy === 'item' ? 'bg-primary-100 text-primary-700' : 'text-gray-400'}`}><TagIcon className="w-6 h-6" /></button>
+                        </div>
+                    </Card>
+                    {selectedIds.size > 0 && statusFilter !== 'all' && (
+                        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-2xl z-50 flex items-center gap-4 animate-slide-up">
+                            <span className="font-bold text-sm bg-gray-700 px-2 py-0.5 rounded-md">{selectedIds.size}</span>
+                            <button onClick={handleBulkAction} className="hover:text-green-400 font-bold text-sm flex items-center gap-1">تنفيذ الإجراء</button>
+                            <button onClick={() => setSelectedIds(new Set())} className="text-gray-400 hover:text-white"><XMarkIcon className="w-5 h-5"/></button>
                         </div>
                     )}
-                    {groupBy !== 'none' && groupedReservations && (
-                        <div className="space-y-6">
-                            {groupedReservations.map((group, idx) => (
-                                <div key={idx} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
-                                    <div className="bg-gray-50 p-4 border-b flex justify-between items-center"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-lg">{group.name[0]}</div><div><h3 className="font-bold text-gray-800">{group.name}</h3><p className="text-xs text-gray-500">{group.items.length} حجوزات</p></div></div><div className="text-right"><div className="text-lg font-bold text-primary-700">{group.total} ر.ي</div></div></div>
-                                    <div className="divide-y divide-gray-100">
-                                        {group.items.map(res => (
-                                            <div key={res.id} className="p-4 hover:bg-gray-50 flex justify-between items-center">
-                                                <div className="flex items-center gap-3">{statusFilter !== 'all' && (<input type="checkbox" checked={selectedIds.has(res.id)} onChange={() => toggleSelect(res.id)} className="w-4 h-4 rounded text-primary-600" />)}<div><p className="font-medium text-sm text-gray-800">{groupBy === 'item' ? res.customerName : res.offeringName} (x{res.quantity})</p><p className="text-xs text-gray-500">{new Date(res.createdAt).toLocaleTimeString('ar-SA')}</p></div></div>
-                                                <div className="flex items-center gap-3"><Badge status={res.status} /></div>
+                    {filteredReservations.length === 0 ? <div className="text-center py-20 bg-white rounded-2xl shadow-sm border border-dashed border-gray-300"><div className="text-6xl mb-4">📭</div><h3 className="text-xl font-bold text-gray-700">لا توجد حجوزات</h3></div> : (
+                        <>
+                            {groupBy === 'none' && (
+                                <div className="space-y-4">
+                                    {statusFilter !== 'all' && <div className="flex items-center gap-2 px-2 text-sm text-gray-500 font-medium"><input type="checkbox" onChange={toggleSelectAll} checked={selectedIds.size === filteredReservations.length && filteredReservations.length > 0} className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" /><span>تحديد الكل</span></div>}
+                                    {filteredReservations.map(res => (
+                                        <Card key={res.id} className={`p-4 flex flex-col md:flex-row items-center gap-4 transition-all ${selectedIds.has(res.id) ? 'ring-2 ring-primary-500 bg-primary-50' : 'hover:border-primary-300'}`}>
+                                            {statusFilter !== 'all' && (<input type="checkbox" checked={selectedIds.has(res.id)} onChange={() => toggleSelect(res.id)} className="w-5 h-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />)}
+                                            <div className="flex-1 w-full md:w-auto">
+                                                <div className="flex justify-between items-start">
+                                                    <div><h3 className="font-bold text-gray-900">{res.offeringName}</h3><p className="text-sm text-gray-500 flex items-center gap-1"><UserIcon className="w-3 h-3"/> {res.customerName}</p></div>
+                                                    <Badge status={res.status} />
+                                                </div>
+                                                <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-600">
+                                                    <span className="flex items-center gap-1"><ClockIcon className="w-4 h-4 text-gray-400"/> {new Date(res.createdAt).toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'})}</span>
+                                                    <span className="flex items-center gap-1 font-bold text-primary-700"><CurrencyDollarIcon className="w-4 h-4"/> {res.totalPrice} ر.ي</span>
+                                                </div>
+                                                {res.paymentReference && <div className="mt-2 bg-green-50 text-green-800 text-xs px-2 py-1 rounded inline-flex items-center gap-1"><BanknotesIcon className="w-3 h-3"/> مرجع الدفع: {res.paymentReference}</div>}
                                             </div>
-                                        ))}
-                                    </div>
+                                            <div className="flex items-center gap-2 w-full md:w-auto justify-end border-t md:border-t-0 pt-3 md:pt-0 mt-3 md:mt-0">
+                                                {res.status === 'pending' && (<><Button variant="ghost" onClick={() => handleSingleStatus(res.id, 'confirmed')} className="text-green-600 bg-green-50 hover:bg-green-100"><CheckCircleIcon className="w-5 h-5"/></Button><Button variant="ghost" onClick={() => handleSingleStatus(res.id, 'cancelled')} className="text-red-600 bg-red-50 hover:bg-red-100"><XCircleIcon className="w-5 h-5"/></Button></>)}
+                                                {res.status === 'confirmed' && (<Button variant="ghost" onClick={() => handleSingleStatus(res.id, 'completed')} className="text-blue-600 bg-blue-50 hover:bg-blue-100">إتمام</Button>)}
+                                            </div>
+                                        </Card>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
+                            )}
+                            {groupBy !== 'none' && groupedReservations && (
+                                <div className="space-y-6">
+                                    {groupedReservations.map((group, idx) => (
+                                        <div key={idx} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
+                                            <div className="bg-gray-50 p-4 border-b flex justify-between items-center">
+                                                <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-lg">{group.name[0]}</div><div><h3 className="font-bold text-gray-800">{group.name}</h3><p className="text-xs text-gray-500">{group.items.length} حجوزات</p></div></div>
+                                                <div className="text-right"><div className="text-lg font-bold text-primary-700">{group.total} ر.ي</div></div>
+                                            </div>
+                                            <div className="divide-y divide-gray-100">
+                                                {group.items.map(res => (
+                                                    <div key={res.id} className="p-4 hover:bg-gray-50 flex justify-between items-center">
+                                                        <div className="flex items-center gap-3">{statusFilter !== 'all' && (<input type="checkbox" checked={selectedIds.has(res.id)} onChange={() => toggleSelect(res.id)} className="w-4 h-4 rounded text-primary-600" />)}<div><p className="font-medium text-sm text-gray-800">{groupBy === 'item' ? res.customerName : res.offeringName} (x{res.quantity})</p><p className="text-xs text-gray-500">{new Date(res.createdAt).toLocaleTimeString('ar-SA')}</p></div></div>
+                                                        <div className="flex items-center gap-3"><Badge status={res.status} /></div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </>
                     )}
-                    </>
-                )}
                 </>
             )}
         </div>
     );
 };
 
-// ... [MyReservations unchanged, just color updates] ...
 const MyReservations = () => {
     const { userProfile } = useContext(AuthContext);
     const { showToast } = useContext(ToastContext);
@@ -771,7 +861,8 @@ const MyReservations = () => {
         try {
             await updateDoc(doc(db, 'reservations', id), { paymentReference: val });
             await sendNotification(providerId, 'تأكيد دفع جديد', `قام ${userProfile?.name} بإرسال رقم السند (${val}) لطلب ${offeringName}`, 'info');
-            showToast("تم إرسال رقم السند", "success"); fetchRes();
+            showToast("تم إرسال رقم السند", "success");
+            fetchRes();
         } catch(e) { showToast("فشل التحديث", "error"); }
     };
 
@@ -780,9 +871,10 @@ const MyReservations = () => {
         try {
             await updateDoc(doc(db, 'reservations', id), { status: 'cancelled' });
             await sendNotification(providerId, 'إلغاء حجز', `قام العميل بإلغاء حجز ${offeringName}`, 'warning');
-            showToast("تم إلغاء الحجز", "info"); fetchRes();
+            showToast("تم إلغاء الحجز", "info");
+            fetchRes();
         } catch(e) { showToast("فشل الإلغاء", "error"); }
-    }
+    };
 
     const filteredReservations = useMemo(() => {
         let res = reservations;
@@ -798,16 +890,16 @@ const MyReservations = () => {
 
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto min-h-screen">
-             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                 <div><h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><ShoppingBagIcon className="w-8 h-8 text-primary-600"/> حجوزاتي</h1><p className="text-gray-500 text-sm mt-1">تابع حالة حجوزاتك وسجل المدفوعات</p></div>
                 <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-gray-200"><CalendarDaysIcon className="w-5 h-5 text-gray-400" /><input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="text-sm border-none focus:ring-0 text-gray-600 font-medium outline-none" /><span className="text-gray-400">-</span><input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="text-sm border-none focus:ring-0 text-gray-600 font-medium outline-none" /></div>
             </div>
-             <Card className="p-4 flex flex-col lg:flex-row gap-4 justify-between items-center mb-6 shadow-md">
+            <Card className="p-4 flex flex-col lg:flex-row gap-4 justify-between items-center mb-6 shadow-md">
                 <div className="flex flex-1 w-full gap-4 flex-col sm:flex-row">
                     <div className="relative flex-1"><MagnifyingGlassIcon className="absolute right-3 top-3 w-5 h-5 text-gray-400" /><input type="text" placeholder="بحث..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pr-10 pl-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" /></div>
                     <div className="flex bg-gray-100 p-1 rounded-lg overflow-x-auto">{['all', 'pending', 'confirmed', 'completed', 'cancelled'].map(st => (<button key={st} onClick={() => setStatusFilter(st)} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${statusFilter === st ? 'bg-white shadow text-primary-700' : 'text-gray-500 hover:text-gray-700'}`}>{st === 'all' ? 'الكل' : st}</button>))}</div>
                 </div>
-             </Card>
+            </Card>
             <div className="space-y-4">
                 {filteredReservations.length === 0 ? <div className="text-center py-12 bg-white rounded-lg shadow-sm"><ShoppingBagIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" /><p className="text-gray-500">لا توجد حجوزات</p></div> : filteredReservations.map(res => (
                     <Card key={res.id} className="p-6">
@@ -830,101 +922,6 @@ const MyReservations = () => {
     );
 };
 
-// ... [ProviderCatalog - Updated for Dynamic Categories] ...
-const ProviderCatalog = () => {
-    const { userProfile } = useContext(AuthContext);
-    const { showToast } = useContext(ToastContext);
-    const [items, setItems] = useState<CatalogItem[]>([]);
-    const [newItem, setNewItem] = useState({ name: '', description: '', price: 0, category: '' });
-    const [imageFile, setImageFile] = useState<File | null>(null);
-    const [uploading, setUploading] = useState(false);
-    const [providerCats, setProviderCats] = useState<string[]>([]); // To store existing categories
-
-    const fetchItems = async () => {
-        if(!userProfile) return;
-        const q = query(collection(db, 'catalogItems'), where('providerId', '==', userProfile.uid));
-        const snapshot = await getDocs(q);
-        const data = snapshot.docs.map(d => ({id: d.id, ...d.data()} as CatalogItem));
-        setItems(data);
-        // Extract unique categories
-        const cats = Array.from(new Set(data.map(i => i.category).filter(Boolean)));
-        setProviderCats(cats);
-    };
-
-    useEffect(() => { fetchItems(); }, [userProfile]);
-
-    const handleAddItem = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setUploading(true);
-        try {
-            let imageUrl = `https://placehold.co/400x400/e2e8f0/1e293b?text=${encodeURIComponent(newItem.name)}`;
-            if (imageFile && userProfile) imageUrl = await uploadFile(imageFile, `items/${userProfile.uid}/${Date.now()}_${imageFile.name}`);
-            if(userProfile) {
-                await addDoc(collection(db, 'catalogItems'), {
-                    providerId: userProfile.uid,
-                    name: newItem.name,
-                    description: newItem.description,
-                    priceDefault: Number(newItem.price),
-                    category: newItem.category || 'عام',
-                    imageUrl,
-                    isActive: true
-                });
-            }
-            showToast("تم الإضافة بنجاح", "success");
-            setNewItem({ name: '', description: '', price: 0, category: '' });
-            setImageFile(null);
-            fetchItems();
-        } catch (error) { showToast("حدث خطأ", "error"); }
-        setUploading(false);
-    };
-
-    return (
-        <div className="p-6 max-w-7xl mx-auto">
-             <h1 className="text-3xl font-bold mb-8 text-gray-800">إدارة الكتالوج</h1>
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <Card className="p-6 h-fit lg:col-span-1">
-                    <h3 className="font-bold text-xl mb-4 text-primary-800 flex items-center gap-2"><PlusIcon className="w-6 h-6"/> إضافة عنصر جديد</h3>
-                    <form onSubmit={handleAddItem} className="space-y-4">
-                        <input type="text" placeholder="اسم العنصر / الخدمة" required className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
-                        <div className="grid grid-cols-2 gap-2">
-                            <input type="number" placeholder="السعر" required className="w-full border p-3 rounded-lg outline-none" value={newItem.price || ''} onChange={e => setNewItem({...newItem, price: Number(e.target.value)})} />
-                            {/* Dynamic Category Input with Datalist */}
-                            <div>
-                                <input list="cats" type="text" placeholder="التصنيف (مثال: مقبلات)" className="w-full border p-3 rounded-lg outline-none" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} />
-                                <datalist id="cats">
-                                    {providerCats.map(c => <option key={c} value={c} />)}
-                                </datalist>
-                            </div>
-                        </div>
-                        <textarea placeholder="وصف التفاصيل..." className="w-full border p-3 rounded-lg outline-none" rows={3} value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})}></textarea>
-                        <div><label className="block text-sm text-gray-600 mb-1">صورة</label><input type="file" accept="image/*" className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" onChange={e => setImageFile(e.target.files ? e.target.files[0] : null)} /></div>
-                        <Button type="submit" isLoading={uploading} className="w-full">حفظ في الكتالوج</Button>
-                    </form>
-                </Card>
-                <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {items.filter(i => i.isActive).map(item => (
-                        <Card key={item.id} className="group relative">
-                            <div className="h-48 overflow-hidden bg-gray-100">
-                                <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                                <div className="absolute top-2 left-2 bg-white/90 backdrop-blur px-2 py-1 rounded text-sm font-bold text-primary-800 shadow-sm">{item.priceDefault} ر.ي</div>
-                            </div>
-                            <div className="p-4">
-                                <h3 className="font-bold text-lg text-gray-800">{item.name}</h3>
-                                <p className="text-gray-500 text-sm mt-1 line-clamp-2">{item.description}</p>
-                                <div className="mt-3 flex justify-between items-center">
-                                    <span className="bg-primary-50 text-primary-700 text-xs px-2 py-1 rounded-full">{item.category}</span>
-                                    <button onClick={async () => { if(confirm('حذف العنصر؟')) { await updateDoc(doc(db, 'catalogItems', item.id), { isActive: false }); fetchItems(); }}} className="text-red-400 hover:text-red-600 p-1"><TrashIcon className="w-5 h-5" /></button>
-                                </div>
-                            </div>
-                        </Card>
-                    ))}
-                </div>
-             </div>
-        </div>
-    );
-};
-
-// ... [ProviderOffers unchanged logic, updated branding] ...
 const ProviderOffers = () => {
     const { userProfile } = useContext(AuthContext);
     const { showToast } = useContext(ToastContext);
@@ -950,10 +947,7 @@ const ProviderOffers = () => {
         const item = items.find(i => i.id === selectedItem);
         if(!item) return;
         try {
-            await addDoc(collection(db, 'offerings'), {
-                itemId: item.id, providerId: userProfile.uid, itemName: item.name, itemImageUrl: item.imageUrl,
-                price: Number(offerData.price), quantityTotal: Number(offerData.quantity), quantityRemaining: Number(offerData.quantity), date: offerData.date, isActive: true
-            });
+            await addDoc(collection(db, 'offerings'), { itemId: item.id, providerId: userProfile.uid, itemName: item.name, itemImageUrl: item.imageUrl, price: Number(offerData.price), quantityTotal: Number(offerData.quantity), quantityRemaining: Number(offerData.quantity), date: offerData.date, isActive: true });
             showToast("تم نشر العرض بنجاح", "success");
         } catch(e) { showToast("خطأ في النشر", "error"); }
     };
@@ -963,7 +957,7 @@ const ProviderOffers = () => {
             <h1 className="text-3xl font-bold mb-8 text-gray-800">نشر العروض / المواعيد</h1>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <Card className="p-6 h-fit lg:col-span-1 border-t-4 border-t-green-500">
-                     <h3 className="font-bold text-xl mb-4 text-green-700 flex items-center gap-2"><CalendarIcon className="w-6 h-6"/> عرض جديد</h3>
+                    <h3 className="font-bold text-xl mb-4 text-green-700 flex items-center gap-2"><CalendarIcon className="w-6 h-6"/> عرض جديد</h3>
                     <form onSubmit={handleCreateOffer} className="space-y-4">
                         <div><label className="block text-sm font-medium text-gray-700 mb-1">اختر من الكتالوج</label><select className="w-full border p-3 rounded-lg outline-none bg-white" required value={selectedItem} onChange={e => { setSelectedItem(e.target.value); const i = items.find(x => x.id === e.target.value); if(i) setOfferData({...offerData, price: i.priceDefault}); }}><option value="">-- اختر --</option>{items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select></div>
                         <div className="grid grid-cols-2 gap-2"><div><label className="block text-sm font-medium text-gray-700 mb-1">سعر العرض</label><input type="number" required className="w-full border p-3 rounded-lg outline-none" value={offerData.price || ''} onChange={e => setOfferData({...offerData, price: Number(e.target.value)})} /></div><div><label className="block text-sm font-medium text-gray-700 mb-1">العدد المتاح</label><input type="number" required className="w-full border p-3 rounded-lg outline-none" value={offerData.quantity} onChange={e => setOfferData({...offerData, quantity: Number(e.target.value)})} /></div></div>
@@ -985,7 +979,6 @@ const ProviderOffers = () => {
     );
 };
 
-// ... [CustomerHome logic updated for categories] ...
 const CustomerHome = () => {
     const { userProfile, currentUser } = useContext(AuthContext);
     const { showToast } = useContext(ToastContext);
@@ -993,14 +986,10 @@ const CustomerHome = () => {
     const [offers, setOffers] = useState<Offering[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('');
-    const [catFilter, setCatFilter] = useState('All');
 
     useEffect(() => {
         const fetchOffers = async () => {
             try {
-                // In a real app we'd join provider data, but here we might need to fetch providers to filter by category effectively if stored on provider. 
-                // For simplicity, we search offering name. Ideally, offering should have 'category' field. 
-                // We will rely on simple name search for now as the architecture is simple.
                 const q = query(collection(db, 'offerings'), where('isActive', '==', true));
                 const snap = await getDocs(q);
                 let data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Offering));
@@ -1015,9 +1004,7 @@ const CustomerHome = () => {
         if (!currentUser) { showToast("يجب تسجيل الدخول للحجز", "info"); window.location.hash = '/login'; return; }
         if (!confirm(`تأكيد حجز ${offer.itemName} بسعر ${offer.price} ر.ي؟`)) return;
         try {
-            await addDoc(collection(db, 'reservations'), {
-                offeringId: offer.id, customerId: currentUser.uid, providerId: offer.providerId, offeringName: offer.itemName, customerName: userProfile?.name || 'Unknown', quantity: 1, totalPrice: offer.price, status: 'pending', createdAt: Date.now()
-            });
+            await addDoc(collection(db, 'reservations'), { offeringId: offer.id, customerId: currentUser.uid, providerId: offer.providerId, offeringName: offer.itemName, customerName: userProfile?.name || 'Unknown', quantity: 1, totalPrice: offer.price, status: 'pending', createdAt: Date.now() });
             await updateDoc(doc(db, 'offerings', offer.id), { quantityRemaining: increment(-1) });
             await sendNotification(offer.providerId, 'طلب جديد', `قام ${userProfile?.name} بطلب ${offer.itemName}`, 'success');
             showToast("تم الحجز بنجاح! تابع طلبك في 'حجوزاتي'", "success");
@@ -1026,76 +1013,49 @@ const CustomerHome = () => {
     };
 
     if (loading) return <div className="p-6 grid gap-4 grid-cols-1 md:grid-cols-3"><SkeletonCard/><SkeletonCard/><SkeletonCard/></div>;
-
     const displayedOffers = offers.filter(o => o.itemName.toLowerCase().includes(filter.toLowerCase()));
 
     return (
         <div className="p-6 max-w-7xl mx-auto min-h-screen">
-             <div className="bg-gradient-to-r from-primary-800 to-primary-600 rounded-2xl p-8 mb-10 text-white shadow-xl flex flex-col md:flex-row items-center justify-between animate-fade-in relative overflow-hidden">
-                <div className="relative z-10">
-                    <h1 className="text-3xl md:text-5xl font-bold mb-4 font-sans">حجزي - Hajzi</h1>
-                    <p className="text-primary-100 text-lg mb-8 max-w-xl leading-relaxed">منصتك الشاملة لحجز كل ما تحتاج. مطاعم، متاجر، خدمات، والمزيد بضغطة زر.</p>
-                    <div className="bg-white/10 p-2 rounded-xl inline-flex items-center backdrop-blur-md border border-white/20 w-full max-w-md shadow-lg transition-all focus-within:bg-white/20">
-                        <MagnifyingGlassIcon className="w-6 h-6 ml-3 text-primary-200" />
-                        <input type="text" placeholder="ابحث عن وجبة، منتج، خدمة..." className="bg-transparent border-none text-white placeholder-primary-300 focus:ring-0 outline-none w-full font-medium" value={filter} onChange={(e) => setFilter(e.target.value)} />
-                    </div>
-                </div>
+            <div className="bg-gradient-to-r from-primary-800 to-primary-600 rounded-2xl p-8 mb-10 text-white shadow-xl flex flex-col md:flex-row items-center justify-between animate-fade-in relative overflow-hidden">
+                <div className="relative z-10"><h1 className="text-3xl md:text-5xl font-bold mb-4 font-sans">حجزي - Hajzi</h1><p className="text-primary-100 text-lg mb-8 max-w-xl leading-relaxed">منصتك الشاملة لحجز كل ما تحتاج. مطاعم، متاجر، خدمات، والمزيد بضغطة زر.</p><div className="bg-white/10 p-2 rounded-xl inline-flex items-center backdrop-blur-md border border-white/20 w-full max-w-md shadow-lg transition-all focus-within:bg-white/20"><MagnifyingGlassIcon className="w-6 h-6 ml-3 text-primary-200" /><input type="text" placeholder="ابحث عن وجبة، منتج، خدمة..." className="bg-transparent border-none text-white placeholder-primary-300 focus:ring-0 outline-none w-full font-medium" value={filter} onChange={(e) => setFilter(e.target.value)} /></div></div>
                 <div className="text-[150px] leading-none mt-6 md:mt-0 opacity-20 md:opacity-100 absolute md:relative right-[-50px] md:right-0 rotate-12 md:rotate-0 transition-transform hover:rotate-12 duration-500 select-none">✨</div>
-             </div>
-
-             <div className="flex items-center gap-3 mb-8">
-                <div className="p-2 bg-primary-100 rounded-full text-primary-600"><CalendarDaysIcon className="w-6 h-6"/></div>
-                <h2 className="text-2xl font-bold text-gray-800">أحدث العروض المتاحة</h2>
-             </div>
-             
-             {displayedOffers.length === 0 ? <div className="text-center py-20 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200"><div className="text-6xl mb-4">🔍</div><p className="text-gray-500 text-xl font-medium">لا توجد نتائج مطابقة</p></div> : (
+            </div>
+            <div className="flex items-center gap-3 mb-8"><div className="p-2 bg-primary-100 rounded-full text-primary-600"><CalendarDaysIcon className="w-6 h-6"/></div><h2 className="text-2xl font-bold text-gray-800">أحدث العروض المتاحة</h2></div>
+            {displayedOffers.length === 0 ? <div className="text-center py-20 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200"><div className="text-6xl mb-4">🔍</div><p className="text-gray-500 text-xl font-medium">لا توجد نتائج مطابقة</p></div> : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {displayedOffers.map(offer => (
                         <Card key={offer.id} className="group hover:-translate-y-2 transition-all duration-300 flex flex-col h-full border-gray-100 hover:shadow-xl hover:border-primary-200">
-                            <div className="h-56 overflow-hidden relative bg-gray-200">
-                                <img src={offer.itemImageUrl || 'https://placehold.co/400?text=Service'} alt={offer.itemName} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-                                <div className="absolute top-3 right-3 bg-white/95 backdrop-blur text-primary-800 px-3 py-1 rounded-lg text-sm font-bold shadow-md flex items-center gap-1"><CurrencyDollarIcon className="w-4 h-4"/> {offer.price}</div>
-                                {offer.quantityRemaining < 5 && (<div className="absolute bottom-3 left-3 bg-red-500/90 backdrop-blur text-white px-2 py-1 rounded-md text-xs font-bold animate-pulse shadow-sm">🔥 متبقي {offer.quantityRemaining}</div>)}
-                            </div>
+                            <div className="h-56 overflow-hidden relative bg-gray-200"><img src={offer.itemImageUrl || 'https://placehold.co/400?text=Service'} alt={offer.itemName} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" /><div className="absolute top-3 right-3 bg-white/95 backdrop-blur text-primary-800 px-3 py-1 rounded-lg text-sm font-bold shadow-md flex items-center gap-1"><CurrencyDollarIcon className="w-4 h-4"/> {offer.price}</div>{offer.quantityRemaining < 5 && (<div className="absolute bottom-3 left-3 bg-red-500/90 backdrop-blur text-white px-2 py-1 rounded-md text-xs font-bold animate-pulse shadow-sm">🔥 متبقي {offer.quantityRemaining}</div>)}</div>
                             <div className="p-5 flex flex-col flex-1">
-                                <div className="flex-1">
-                                    <div className="flex justify-between items-start mb-2"><h3 className="font-bold text-lg text-gray-900 leading-tight">{offer.itemName}</h3></div>
-                                    <p className="text-xs text-gray-500 flex items-center gap-1 mb-4 bg-gray-50 p-2 rounded-lg"><UserIcon className="w-3 h-3"/> مقدم الخدمة: ...{offer.providerId.substring(0,5)}</p>
-                                </div>
+                                <div className="flex-1"><div className="flex justify-between items-start mb-2"><h3 className="font-bold text-lg text-gray-900 leading-tight">{offer.itemName}</h3></div><p className="text-xs text-gray-500 flex items-center gap-1 mb-4 bg-gray-50 p-2 rounded-lg"><UserIcon className="w-3 h-3"/> مقدم الخدمة: ...{offer.providerId.substring(0,5)}</p></div>
                                 <Button onClick={() => handleReserve(offer)} className="w-full mt-2 group-hover:bg-primary-700 transition-colors" disabled={offer.quantityRemaining <= 0}>{offer.quantityRemaining > 0 ? 'حجز الآن' : 'نفذت الكمية'}</Button>
                             </div>
                         </Card>
                     ))}
                 </div>
-             )}
+            )}
         </div>
     );
 };
 
-// ... [ProvidersList Logic] ...
 const ProvidersList = () => {
-    const { userProfile } = useContext(AuthContext);
     const [providers, setProviders] = useState<ProviderProfile[]>([]);
-    
     useEffect(() => {
-        const load = async () => {
-            const snap = await getDocs(collection(db, 'providers'));
-            setProviders(snap.docs.map(d => d.data() as ProviderProfile));
-        };
+        const load = async () => { const snap = await getDocs(collection(db, 'providers')); setProviders(snap.docs.map(d => d.data() as ProviderProfile)); };
         load();
     }, []);
-
     return (
         <div className="p-6 max-w-7xl mx-auto min-h-screen">
             <h1 className="text-3xl font-bold mb-8 text-gray-800">مقدمو الخدمات</h1>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {providers.map(prov => (
                     <Card key={prov.providerId} className="p-8 flex flex-col items-center text-center hover:translate-y-[-5px] transition-transform">
-                         <div className="h-24 w-24 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center mb-4 text-primary-700 font-bold text-3xl shadow-inner">{prov.name[0]}</div>
-                         <h3 className="font-bold text-xl text-gray-800">{prov.name}</h3>
-                         <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded mt-1">{prov.category || 'عام'}</span>
-                         <p className="text-gray-500 text-sm mt-3 mb-6">{prov.description}</p>
-                         <Button variant="outline" className="rounded-full px-8">زيارة الملف</Button>
+                        <div className="h-24 w-24 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center mb-4 text-primary-700 font-bold text-3xl shadow-inner">{prov.name[0]}</div>
+                        <h3 className="font-bold text-xl text-gray-800">{prov.name}</h3>
+                        <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded mt-1">{prov.category || 'عام'}</span>
+                        <p className="text-gray-500 text-sm mt-3 mb-6">{prov.description}</p>
+                        <Button variant="outline" className="rounded-full px-8">زيارة الملف</Button>
                     </Card>
                 ))}
             </div>
@@ -1103,7 +1063,327 @@ const ProvidersList = () => {
     );
 };
 
-// ... [App Shell] ...
+const ProviderCatalog = () => {
+    const { userProfile, providerProfile, refreshProfile } = useContext(AuthContext);
+    const { showToast } = useContext(ToastContext);
+    
+    // State
+    const [items, setItems] = useState<CatalogItem[]>([]);
+    const [reservations, setReservations] = useState<Reservation[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [view, setView] = useState<'items' | 'categories'>('items');
+    
+    // Modal & Form State
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
+    const [formName, setFormName] = useState('');
+    const [formDesc, setFormDesc] = useState('');
+    const [formPrice, setFormPrice] = useState(0);
+    const [formCurrency, setFormCurrency] = useState<Currency>('YER');
+    const [formCategory, setFormCategory] = useState('');
+    const [formImage, setFormImage] = useState<File | null>(null);
+    const [uploading, setUploading] = useState(false);
+    
+    // Search
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Fetch Data
+    const fetchData = async () => {
+        if(!userProfile) return;
+        setLoading(true);
+        try {
+            // Fetch Items
+            const itemsSnap = await getDocs(query(collection(db, 'catalogItems'), where('providerId', '==', userProfile.uid), where('isActive', '==', true)));
+            const itemsData = itemsSnap.docs.map(d => ({id: d.id, ...d.data()} as CatalogItem));
+            
+            // Fetch Reservations for stats linkage
+            const resSnap = await getDocs(query(collection(db, 'reservations'), where('providerId', '==', userProfile.uid), where('status', '==', 'completed')));
+            const resData = resSnap.docs.map(d => d.data() as Reservation);
+
+            // Compute Stats per Item
+            itemsData.forEach(item => {
+                const itemRes = resData.filter(r => r.offeringName === item.name); // Approximate match by name as reservation doesn't strictly store catalogId
+                item.stats = {
+                    totalSold: itemRes.reduce((acc, curr) => acc + curr.quantity, 0),
+                    totalRevenue: itemRes.reduce((acc, curr) => acc + curr.totalPrice, 0)
+                };
+            });
+
+            setItems(itemsData);
+            setReservations(resData);
+        } catch(e) { console.error(e); }
+        setLoading(false);
+    };
+
+    useEffect(() => { fetchData(); }, [userProfile]);
+
+    // Derived Data
+    const globalStats = useMemo(() => {
+        const totalItems = items.length;
+        const totalSold = reservations.reduce((acc, r) => acc + r.quantity, 0);
+        const totalRevenue = reservations.reduce((acc, r) => acc + r.totalPrice, 0);
+        const topItem = items.reduce((prev, current) => (prev?.stats?.totalSold || 0) > (current?.stats?.totalSold || 0) ? prev : current, items[0]);
+        return { totalItems, totalSold, totalRevenue, topItem };
+    }, [items, reservations]);
+
+    const filteredItems = useMemo(() => {
+        return items.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    }, [items, searchQuery]);
+
+    const availableCategories = useMemo(() => {
+        return providerProfile?.savedCategories || ['عام', 'رئيسي', 'مشروبات', 'حلويات'];
+    }, [providerProfile]);
+
+    // Handlers
+    const openModal = (item?: CatalogItem) => {
+        if(item) {
+            setEditingItem(item);
+            setFormName(item.name);
+            setFormDesc(item.description);
+            setFormPrice(item.priceDefault);
+            setFormCurrency(item.currency || 'YER');
+            setFormCategory(item.category);
+        } else {
+            setEditingItem(null);
+            setFormName(''); setFormDesc(''); setFormPrice(0); setFormCurrency('YER'); setFormCategory(availableCategories[0] || ''); setFormImage(null);
+        }
+        setIsModalOpen(true);
+    };
+
+    const handleSaveItem = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if(!userProfile) return;
+        setUploading(true);
+        try {
+            let imageUrl = editingItem?.imageUrl || `https://placehold.co/400x400/e2e8f0/1e293b?text=${encodeURIComponent(formName)}`;
+            if (formImage) {
+                imageUrl = await uploadFile(formImage, `items/${userProfile.uid}/${Date.now()}_${formImage.name}`);
+            }
+
+            const itemData = {
+                providerId: userProfile.uid,
+                name: formName,
+                description: formDesc,
+                priceDefault: Number(formPrice),
+                currency: formCurrency,
+                category: formCategory,
+                imageUrl,
+                isActive: true
+            };
+
+            if (editingItem) {
+                await updateDoc(doc(db, 'catalogItems', editingItem.id), itemData);
+                showToast("تم تحديث الصنف", "success");
+            } else {
+                await addDoc(collection(db, 'catalogItems'), { ...itemData, createdAt: Date.now() });
+                showToast("تم إضافة الصنف", "success");
+            }
+            setIsModalOpen(false);
+            fetchData();
+        } catch(e) { showToast("حدث خطأ", "error"); }
+        setUploading(false);
+    };
+
+    const handleDeleteItem = async (id: string) => {
+        if(!confirm("هل أنت متأكد من حذف هذا الصنف؟")) return;
+        try {
+            await updateDoc(doc(db, 'catalogItems', id), { isActive: false });
+            fetchData();
+            showToast("تم الحذف", "success");
+        } catch(e) { showToast("خطأ في الحذف", "error"); }
+    };
+
+    // Category Manager Logic
+    const [newCatName, setNewCatName] = useState('');
+    const handleAddCategory = async () => {
+        if(!newCatName.trim() || !userProfile) return;
+        const currentCats = providerProfile?.savedCategories || [];
+        if(currentCats.includes(newCatName)) { showToast("التصنيف موجود مسبقاً", "info"); return; }
+        const updatedCats = [...currentCats, newCatName];
+        await updateDoc(doc(db, 'providers', userProfile.uid), { savedCategories: updatedCats });
+        refreshProfile();
+        setNewCatName('');
+        showToast("تم إضافة التصنيف", "success");
+    };
+
+    const handleDeleteCategory = async (cat: string) => {
+        if(!confirm(`حذف تصنيف "${cat}"؟`)) return;
+        if(!userProfile) return;
+        const currentCats = providerProfile?.savedCategories || [];
+        const updatedCats = currentCats.filter(c => c !== cat);
+        await updateDoc(doc(db, 'providers', userProfile.uid), { savedCategories: updatedCats });
+        refreshProfile();
+    };
+
+    // Sub-components
+    const StatWidget = ({title, value, subtitle, icon, gradient}: any) => (
+        <div className={`p-4 rounded-xl shadow-md text-white ${gradient} flex items-center justify-between`}>
+            <div>
+                <p className="text-white/80 text-xs font-medium mb-1">{title}</p>
+                <h3 className="text-2xl font-bold">{value}</h3>
+                {subtitle && <p className="text-white/60 text-xs mt-1">{subtitle}</p>}
+            </div>
+            <div className="bg-white/20 p-2 rounded-lg">{icon}</div>
+        </div>
+    );
+
+    return (
+        <div className="p-6 max-w-7xl mx-auto min-h-screen space-y-8">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
+                        <ShoppingBagIcon className="w-8 h-8 text-primary-600"/> إدارة الكتالوج
+                    </h1>
+                    <p className="text-gray-500 text-sm mt-1">أدر أصنافك وخدماتك باحترافية</p>
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={() => setView('items')} className={`px-4 py-2 rounded-lg font-bold transition-all ${view === 'items' ? 'bg-primary-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-50 border'}`}>الأصناف</button>
+                    <button onClick={() => setView('categories')} className={`px-4 py-2 rounded-lg font-bold transition-all ${view === 'categories' ? 'bg-primary-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-50 border'}`}>التصنيفات</button>
+                </div>
+            </div>
+
+            {/* Quick Stats Bar */}
+            {view === 'items' && !loading && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in">
+                    <StatWidget title="الأكثر مبيعاً" value={globalStats.topItem?.name || '-'} subtitle={`${globalStats.topItem?.stats?.totalSold || 0} مبيعات`} icon={<ChartBarIcon className="w-6 h-6"/>} gradient="bg-gradient-to-r from-violet-500 to-purple-500" />
+                    <StatWidget title="إجمالي الأصناف" value={globalStats.totalItems} icon={<TagIcon className="w-6 h-6"/>} gradient="bg-gradient-to-r from-blue-500 to-cyan-500" />
+                    <StatWidget title="إجمالي الإيرادات" value={`${globalStats.totalRevenue.toLocaleString()}`} subtitle="من الطلبات المكتملة" icon={<CurrencyDollarIcon className="w-6 h-6"/>} gradient="bg-gradient-to-r from-emerald-500 to-teal-500" />
+                </div>
+            )}
+
+            {loading ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><SkeletonCard/><SkeletonCard/><SkeletonCard/></div>
+            ) : view === 'categories' ? (
+                // --- CATEGORIES VIEW ---
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in max-w-2xl mx-auto">
+                    <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2"><TagIcon className="w-6 h-6 text-primary-600"/> إدارة أنواع الأصناف</h3>
+                    <div className="flex gap-2 mb-6">
+                        <input type="text" placeholder="اسم التصنيف الجديد (مثال: وجبات رئيسية)" className="flex-1 border p-3 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none" value={newCatName} onChange={e => setNewCatName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddCategory()} />
+                        <Button onClick={handleAddCategory}><PlusIcon className="w-5 h-5"/> إضافة</Button>
+                    </div>
+                    <div className="space-y-2">
+                        {availableCategories.length === 0 && <p className="text-center text-gray-400 py-4">لا توجد تصنيفات محفوظة</p>}
+                        {availableCategories.map((cat, idx) => (
+                            <div key={idx} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg border border-gray-100 group transition-all">
+                                <span className="font-medium text-gray-700">{cat}</span>
+                                <button onClick={() => handleDeleteCategory(cat)} className="text-gray-300 group-hover:text-red-500 transition-colors p-1"><TrashIcon className="w-5 h-5"/></button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : (
+                // --- ITEMS VIEW ---
+                <div className="space-y-6 animate-fade-in">
+                    {/* Toolbar */}
+                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col sm:flex-row gap-4 justify-between items-center">
+                        <div className="relative w-full sm:w-96">
+                            <MagnifyingGlassIcon className="absolute right-3 top-3 w-5 h-5 text-gray-400"/>
+                            <input type="text" placeholder="بحث عن صنف..." className="w-full pr-10 pl-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                        </div>
+                        <Button onClick={() => openModal()} className="w-full sm:w-auto"><PlusIcon className="w-5 h-5"/> إضافة صنف جديد</Button>
+                    </div>
+
+                    {/* Grid */}
+                    {filteredItems.length === 0 ? (
+                        <div className="text-center py-20 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                            <ShoppingBagIcon className="w-16 h-16 text-gray-300 mx-auto mb-4"/>
+                            <p className="text-gray-500 text-xl">لا توجد أصناف مطابقة</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {filteredItems.map(item => (
+                                <div key={item.id} className="group relative bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+                                    {/* Stats Overlay on Hover */}
+                                    <div className="absolute inset-0 bg-primary-900/90 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center text-white p-6 text-center space-y-4 backdrop-blur-sm">
+                                        <div>
+                                            <p className="text-primary-200 text-xs font-bold uppercase tracking-wider">المبيعات</p>
+                                            <p className="text-3xl font-bold">{item.stats?.totalSold || 0}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-primary-200 text-xs font-bold uppercase tracking-wider">الإيرادات</p>
+                                            <p className="text-2xl font-bold">{item.stats?.totalRevenue.toLocaleString() || 0}</p>
+                                        </div>
+                                        <div className="flex gap-2 mt-4">
+                                            <button onClick={() => openModal(item)} className="bg-white text-primary-900 px-4 py-2 rounded-lg font-bold hover:bg-gray-100"><PencilSquareIcon className="w-5 h-5"/></button>
+                                            <button onClick={() => handleDeleteItem(item.id)} className="bg-red-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-red-600"><TrashIcon className="w-5 h-5"/></button>
+                                        </div>
+                                    </div>
+
+                                    {/* Card Content */}
+                                    <div className="h-48 overflow-hidden bg-gray-100 relative">
+                                        <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                                        <div className="absolute top-2 right-2 bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-xs font-bold text-gray-700 shadow-sm">{item.category}</div>
+                                    </div>
+                                    <div className="p-4">
+                                        <h3 className="font-bold text-lg text-gray-900 mb-1">{item.name}</h3>
+                                        <div className="flex justify-between items-center mt-3">
+                                            <div className="bg-primary-50 text-primary-700 px-3 py-1 rounded-full font-bold text-sm">
+                                                {item.priceDefault} <span className="text-[10px]">{item.currency || 'YER'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Modal */}
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'تعديل الصنف' : 'إضافة صنف جديد'}>
+                <form onSubmit={handleSaveItem} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">اسم الصنف</label>
+                        <input type="text" required className="w-full border p-3 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none" value={formName} onChange={e => setFormName(e.target.value)} placeholder="مثال: بيتزا خضار" />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">السعر</label>
+                            <input type="number" required className="w-full border p-3 rounded-xl outline-none" value={formPrice || ''} onChange={e => setFormPrice(Number(e.target.value))} />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">العملة</label>
+                            <select className="w-full border p-3 rounded-xl outline-none bg-white" value={formCurrency} onChange={e => setFormCurrency(e.target.value as Currency)}>
+                                <option value="YER">ر.ي (YER)</option>
+                                <option value="SAR">ر.س (SAR)</option>
+                                <option value="USD">دولار (USD)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">التصنيف</label>
+                        <select className="w-full border p-3 rounded-xl outline-none bg-white" value={formCategory} onChange={e => setFormCategory(e.target.value)}>
+                            {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <p className="text-xs text-gray-400 mt-1">يمكنك إدارة القائمة من تبويب "التصنيفات"</p>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">الوصف</label>
+                        <textarea className="w-full border p-3 rounded-xl outline-none" rows={3} value={formDesc} onChange={e => setFormDesc(e.target.value)} placeholder="مكونات، تفاصيل..." />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">صورة الصنف</label>
+                        <div className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center hover:bg-gray-50 transition-colors cursor-pointer relative">
+                            <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => setFormImage(e.target.files ? e.target.files[0] : null)} />
+                            <PhotoIcon className="w-8 h-8 text-gray-400 mx-auto mb-2"/>
+                            <p className="text-sm text-gray-500">{formImage ? formImage.name : 'اسحب الصورة هنا أو اضغط للاختيار'}</p>
+                        </div>
+                    </div>
+
+                    <div className="pt-4">
+                        <Button type="submit" isLoading={uploading} className="w-full">{editingItem ? 'حفظ التعديلات' : 'إضافة للقائمة'}</Button>
+                    </div>
+                </form>
+            </Modal>
+        </div>
+    );
+};
+
 const ProtectedRoute = ({ children, allowedRoles }: { children?: React.ReactNode, allowedRoles?: UserRole[] }) => {
     const { currentUser, userProfile, loading } = useContext(AuthContext);
     if (loading) return <LoadingSpinner />;
@@ -1120,22 +1400,17 @@ const AppContent = () => {
                 <Routes>
                     <Route path="/login" element={<Login />} />
                     <Route path="/register" element={<Register />} />
-                    
                     <Route path="/" element={<CustomerHome />} />
                     <Route path="/providers" element={<ProvidersList />} />
                     <Route path="/my-reservations" element={<ProtectedRoute allowedRoles={['customer']}><MyReservations /></ProtectedRoute>} />
-
                     <Route path="/provider/dashboard" element={<ProtectedRoute allowedRoles={['provider']}><ProviderDashboard /></ProtectedRoute>} />
                     <Route path="/provider/catalog" element={<ProtectedRoute allowedRoles={['provider']}><ProviderCatalog /></ProtectedRoute>} />
                     <Route path="/provider/offers" element={<ProtectedRoute allowedRoles={['provider']}><ProviderOffers /></ProtectedRoute>} />
                     <Route path="/provider/reservations" element={<ProtectedRoute allowedRoles={['provider']}><ProviderReservations /></ProtectedRoute>} />
-
                     <Route path="*" element={<Navigate to="/" />} />
                 </Routes>
             </div>
-            <footer className="bg-primary-900 text-primary-100 text-center py-6 mt-12">
-                <p className="font-medium opacity-80">&copy; {new Date().getFullYear()} حجزي - Hajzi</p>
-            </footer>
+            <footer className="bg-primary-900 text-primary-100 text-center py-6 mt-12"><p className="font-medium opacity-80">&copy; {new Date().getFullYear()} حجزي - Hajzi</p></footer>
         </div>
     );
 };

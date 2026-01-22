@@ -16,10 +16,13 @@ export interface ProviderProfile {
   providerId: string; // Same as uid
   name: string;
   description: string;
-  category: ProviderCategory; // New field
+  category: ProviderCategory;
   followersCount: number;
   imageUrl?: string;
+  savedCategories?: string[]; // Custom categories created by provider
 }
+
+export type Currency = 'YER' | 'SAR' | 'USD';
 
 export interface CatalogItem {
   id: string;
@@ -27,21 +30,28 @@ export interface CatalogItem {
   name: string;
   description: string;
   priceDefault: number;
-  category: string; // Free text defined by provider (e.g. "Main Course", "Shoes")
+  currency: Currency; // Added currency
+  category: string;
   imageUrl?: string;
   isActive: boolean;
+  createdAt?: number;
+  // Computed stats fields (optional/runtime)
+  stats?: {
+    totalSold: number;
+    totalRevenue: number;
+  };
 }
 
 export interface Offering {
   id: string;
   itemId: string;
   providerId: string;
-  itemName: string; // Denormalized for easier display
-  itemImageUrl?: string; // Denormalized
+  itemName: string;
+  itemImageUrl?: string;
   price: number;
   quantityTotal: number;
   quantityRemaining: number;
-  date: string; // ISO Date string YYYY-MM-DD
+  date: string;
   isActive: boolean;
 }
 
@@ -52,12 +62,12 @@ export interface Reservation {
   offeringId: string;
   customerId: string;
   providerId: string;
-  offeringName: string; // Denormalized
-  customerName: string; // Denormalized
+  offeringName: string;
+  customerName: string;
   quantity: number;
   totalPrice: number;
-  paymentProofUrl?: string; // Legacy support
-  paymentReference?: string; // New text based payment
+  paymentProofUrl?: string;
+  paymentReference?: string;
   status: ReservationStatus;
   createdAt: number;
 }
@@ -75,6 +85,6 @@ export interface AppNotification {
   body: string;
   type: 'info' | 'success' | 'warning' | 'error';
   read: boolean;
-  createdAt: number; // Timestamp
+  createdAt: number;
   link?: string;
 }
