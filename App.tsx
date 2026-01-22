@@ -1459,6 +1459,7 @@ const ProviderCatalog = () => {
     };
 
     const handleDeleteCategory = async (cat: string) => {
+        if (!userProfile) return; // Added guard to fix TS18047
         // Check if used
         const isUsed = items.some(i => i.category === cat && i.isActive);
         if (isUsed) { showToast(`لا يمكن حذف تصنيف "${cat}" لأنه مستخدم في أصناف نشطة`, "error"); return; }
