@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Users: Strict check as requested
+    match /users/{userId} {
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow read, update: if isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // Providers: Public read, Owner write
+    match /providers/{providerId} {
+      allow read: if true;
+      allow create, update: if isSignedIn() && request.auth.uid == providerId;
+    }
+    
+    // Catalog Items: Public read, Provider manage
+    match /catalogItems/{itemId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.providerId == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.providerId == request.auth.uid;
+    }
+    
+    // Offerings: Public read, Provider manage, Customer book (decrement)
+    match /offerings/{offeringId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.providerId == request.auth.uid;
+      // Allow updates by provider OR quantity updates by customer (during booking)
+      allow update: if isSignedIn() && (
+        resource.data.providerId == request.auth.uid || 
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantityRemaining']))
+      );
+    }
+    
+    // Reservations: Create by customer, Read/Update by involved parties
+    match /reservations/{resId} {
+      allow create: if isSignedIn() && request.resource.data.customerId == request.auth.uid;
+      allow read: if isSignedIn() && (resource.data.customerId == request.auth.uid || resource.data.providerId == request.auth.uid);
+      allow update: if isSignedIn() && (resource.data.customerId == request.auth.uid || resource.data.providerId == request.auth.uid);
+    }
+    
+    // Follows
+    match /follows/{followId} {
+       allow read: if isSignedIn();
+       allow create: if isSignedIn() && request.resource.data.customerId == request.auth.uid;
+       allow update, delete: if isSignedIn();
+    }
+    
+    // Mandatory artifact rule (system)
+    match /artifacts/seafood-bf083/users/{userId}/{document=**} {
+       allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+  }
+}
