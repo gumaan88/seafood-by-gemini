@@ -31,9 +31,20 @@ export const CustomerHome = () => {
             showToast("يجب تسجيل الدخول للحجز", "info");
             return;
         }
-        if (!confirm(`تأكيد حجز ${offer.itemName} بسعر ${offer.price} ر.ي؟`)) return;
+        if (!confirm(`تأكيد حجز ${offer.itemName} بسعر ${offer.price} ${(offer as any).currency || 'YER'}؟`)) return;
         try {
-            await addDoc(collection(db, 'reservations'), { offeringId: offer.id, customerId: currentUser.uid, providerId: offer.providerId, offeringName: offer.itemName, customerName: userProfile?.name || 'Unknown', quantity: 1, totalPrice: offer.price, status: 'pending', createdAt: Date.now() });
+            await addDoc(collection(db, 'reservations'), { 
+                offeringId: offer.id, 
+                customerId: currentUser.uid, 
+                providerId: offer.providerId, 
+                offeringName: offer.itemName, 
+                customerName: userProfile?.name || 'Unknown', 
+                quantity: 1, 
+                totalPrice: offer.price, 
+                currency: (offer as any).currency || 'YER', // Save currency snapshot
+                status: 'pending', 
+                createdAt: Date.now() 
+            });
             await updateDoc(doc(db, 'offerings', offer.id), { quantityRemaining: increment(-1) });
             await sendNotification(offer.providerId, 'طلب جديد', `قام ${userProfile?.name} بطلب ${offer.itemName}`, 'success');
             showToast("تم الحجز بنجاح! تابع طلبك في 'حجوزاتي'", "success");
@@ -68,7 +79,7 @@ export const CustomerHome = () => {
                         <Card key={offer.id} className="group hover:-translate-y-2 transition-all duration-300 flex flex-col h-full border-gray-100 hover:shadow-xl hover:border-primary-200">
                             <div className="h-56 overflow-hidden relative bg-gray-200">
                                 <img src={offer.itemImageUrl || 'https://placehold.co/400?text=Service'} alt={offer.itemName} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-                                <div className="absolute top-3 right-3 bg-white/95 backdrop-blur text-primary-800 px-3 py-1 rounded-lg text-sm font-bold shadow-md flex items-center gap-1"><CurrencyDollarIcon className="w-4 h-4" /> {offer.price}</div>
+                                <div className="absolute top-3 right-3 bg-white/95 backdrop-blur text-primary-800 px-3 py-1 rounded-lg text-sm font-bold shadow-md flex items-center gap-1"><CurrencyDollarIcon className="w-4 h-4" /> {offer.price} <span className="text-[10px] font-normal">{(offer as any).currency || 'YER'}</span></div>
                                 {offer.quantityRemaining < 5 && (<div className="absolute bottom-3 left-3 bg-red-500/90 backdrop-blur text-white px-2 py-1 rounded-md text-xs font-bold animate-pulse shadow-sm">🔥 متبقي {offer.quantityRemaining}</div>)}
                             </div>
                             <div className="p-5 flex flex-col flex-1">
@@ -183,7 +194,7 @@ export const MyReservations = () => {
                                 </div>
                                 <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-3">
                                     <span>الكمية: <b className="text-gray-900">{res.quantity}</b></span>
-                                    <span>الإجمالي: <b className="text-primary-700">{res.totalPrice} ر.ي</b></span>
+                                    <span>الإجمالي: <b className="text-primary-700">{res.totalPrice} {(res as any).currency || 'YER'}</b></span>
                                     <span className="text-gray-400">{new Date(res.createdAt).toLocaleDateString('ar-SA')}</span>
                                 </div>
                                 {res.status === 'pending' && (

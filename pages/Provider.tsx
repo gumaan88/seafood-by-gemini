@@ -16,7 +16,7 @@ const getSaudiDate = () => new Date().toLocaleDateString('en-CA', { timeZone: 'A
 // --- DASHBOARD ---
 export const ProviderDashboard = () => {
     const { userProfile } = useContext(AuthContext);
-    const [stats, setStats] = useState({ items: 0, offers: 0, reservations: 0, revenue: 0, followers: 0 });
+    const [stats, setStats] = useState({ items: 0, offers: 0, reservations: 0, revenue: {} as Record<string, number>, followers: 0 });
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -25,24 +25,43 @@ export const ProviderDashboard = () => {
                 const itemsSnap = await getDocs(query(collection(db, 'catalogItems'), where('providerId', '==', userProfile.uid)));
                 const offersSnap = await getDocs(query(collection(db, 'offerings'), where('providerId', '==', userProfile.uid), where('isActive', '==', true)));
                 const resSnap = await getDocs(query(collection(db, 'reservations'), where('providerId', '==', userProfile.uid)));
-                let rev = 0;
+                
+                // Calculate revenue based on reservation price (Snapshot Price) grouped by Currency
+                let rev: Record<string, number> = {};
                 resSnap.forEach(doc => {
-                    const data = doc.data() as Reservation;
-                    if (data.status === 'completed') rev += data.totalPrice;
+                    const data = doc.data() as Reservation & { currency?: string };
+                    if (data.status === 'completed') {
+                        const curr = data.currency || 'YER';
+                        rev[curr] = (rev[curr] || 0) + data.totalPrice;
+                    }
                 });
+                
                 setStats({ items: itemsSnap.size, offers: offersSnap.size, reservations: resSnap.size, revenue: rev, followers: 0 });
             } catch (e) { console.error(e); }
         };
         fetchStats();
     }, [userProfile]);
 
-    const StatCard = ({ title, value, color, icon }: any) => (
+    const StatCard = ({ title, value, color, icon, isMultiValue }: any) => (
         <Card className={`p-6 flex items-center justify-between border-l-4 overflow-hidden relative group hover:-translate-y-1 transition-transform`} style={{ borderLeftColor: color }}>
-            <div className="relative z-10">
+            <div className="relative z-10 w-full">
                 <p className="text-gray-500 text-sm font-medium mb-1">{title}</p>
-                <h3 className="text-4xl font-extrabold text-gray-800 tracking-tight">{value}</h3>
+                {isMultiValue ? (
+                     <div className="flex flex-col gap-1">
+                        {Object.keys(value).length === 0 ? <span className="text-2xl font-extrabold text-gray-800">0</span> : 
+                            Object.entries(value).map(([curr, amount]: any) => (
+                                <div key={curr} className="flex items-center justify-between w-full">
+                                    <span className="text-xl font-extrabold text-gray-800 tracking-tight">{amount.toLocaleString()}</span>
+                                    <span className="text-xs font-bold bg-gray-100 px-2 py-0.5 rounded text-gray-600 ml-2">{curr}</span>
+                                </div>
+                            ))
+                        }
+                     </div>
+                ) : (
+                    <h3 className="text-4xl font-extrabold text-gray-800 tracking-tight">{value}</h3>
+                )}
             </div>
-            <div className={`p-4 rounded-xl text-white shadow-lg relative z-10`} style={{ background: color }}>{icon}</div>
+            <div className={`p-4 rounded-xl text-white shadow-lg relative z-10 ml-4`} style={{ background: color }}>{icon}</div>
         </Card>
     );
 
@@ -56,7 +75,7 @@ export const ProviderDashboard = () => {
                 <StatCard title="الأصناف / الخدمات" value={stats.items} color="#6366f1" icon={<ShoppingBagIcon className="w-6 h-6" />} />
                 <StatCard title="العروض النشطة" value={stats.offers} color="#10b981" icon={<CalendarIcon className="w-6 h-6" />} />
                 <StatCard title="إجمالي الحجوزات" value={stats.reservations} color="#f59e0b" icon={<ClipboardDocumentCheckIcon className="w-6 h-6" />} />
-                <StatCard title="الإيرادات" value={`${stats.revenue.toLocaleString()}`} color="#8b5cf6" icon={<CurrencyDollarIcon className="w-6 h-6" />} />
+                <StatCard title="الإيرادات المحققة" value={stats.revenue} color="#8b5cf6" icon={<CurrencyDollarIcon className="w-6 h-6" />} isMultiValue={true} />
             </div>
         </div>
     );
@@ -75,6 +94,14 @@ export const ProviderReservations = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [groupBy, setGroupBy] = useState<'none' | 'customer' | 'item'>('none');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+    const statusLabels: Record<string, string> = {
+        all: 'الكل',
+        pending: 'معلق',
+        confirmed: 'مؤكد',
+        completed: 'مكتمل',
+        cancelled: 'ملغي'
+    };
 
     const fetchReservations = async () => {
         if (!userProfile) return;
@@ -105,7 +132,16 @@ export const ProviderReservations = () => {
         const total = filteredReservations.length;
         const pending = filteredReservations.filter(r => r.status === 'pending').length;
         const confirmed = filteredReservations.filter(r => r.status === 'confirmed').length;
-        const revenue = filteredReservations.reduce((acc, curr) => (curr.status === 'completed' || curr.status === 'confirmed') ? acc + curr.totalPrice : acc, 0);
+        
+        // Revenue grouped by currency using the reservation snapshot price
+        const revenue: Record<string, number> = {};
+        filteredReservations.forEach(r => {
+            if (r.status === 'completed' || r.status === 'confirmed') {
+                const currency = (r as any).currency || 'YER';
+                revenue[currency] = (revenue[currency] || 0) + r.totalPrice;
+            }
+        });
+
         const itemCounts: Record<string, number> = {};
         filteredReservations.forEach(r => { itemCounts[r.offeringName] = (itemCounts[r.offeringName] || 0) + r.quantity; });
         return { total, pending, confirmed, revenue, itemCounts };
@@ -154,13 +190,17 @@ export const ProviderReservations = () => {
 
     const groupedReservations = useMemo(() => {
         if (groupBy === 'none') return null;
-        const groups: Record<string, { name: string, items: Reservation[], total: number }> = {};
+        const groups: Record<string, { name: string, items: Reservation[], totals: Record<string, number> }> = {};
         filteredReservations.forEach(r => {
             let key = groupBy === 'customer' ? r.customerId : r.offeringName;
             let name = groupBy === 'customer' ? r.customerName : r.offeringName;
-            if (!groups[key]) groups[key] = { name, items: [], total: 0 };
+            if (!groups[key]) groups[key] = { name, items: [], totals: {} };
             groups[key].items.push(r);
-            if (r.status !== 'cancelled') groups[key].total += r.totalPrice;
+            
+            if (r.status !== 'cancelled') {
+                const currency = (r as any).currency || 'YER';
+                groups[key].totals[currency] = (groups[key].totals[currency] || 0) + r.totalPrice;
+            }
         });
         return Object.values(groups);
     }, [filteredReservations, groupBy]);
@@ -195,7 +235,15 @@ export const ProviderReservations = () => {
                         </div>
                         <div className="bg-white p-4 rounded-xl shadow-sm border-r-4 border-purple-500">
                             <p className="text-xs text-gray-500 font-bold mb-1">الإيرادات</p>
-                            <p className="text-2xl font-bold text-purple-600">{stats.revenue.toLocaleString()}</p>
+                            <div className="flex flex-col">
+                                {Object.keys(stats.revenue).length === 0 ? <span className="text-xl font-bold text-purple-600">0</span> :
+                                    Object.entries(stats.revenue).map(([curr, val]) => (
+                                        <span key={curr} className="text-sm font-bold text-purple-600 flex justify-between w-full">
+                                            {val.toLocaleString()} <span className="text-xs bg-purple-50 px-1 rounded ml-1">{curr}</span>
+                                        </span>
+                                    ))
+                                }
+                            </div>
                         </div>
                     </div>
                     {Object.keys(stats.itemCounts).length > 0 &&
@@ -216,7 +264,7 @@ export const ProviderReservations = () => {
                             </div>
                             <div className="flex bg-gray-100 p-1 rounded-lg overflow-x-auto">
                                 {['all', 'pending', 'confirmed', 'completed', 'cancelled'].map(st => (
-                                    <button key={st} onClick={() => { setStatusFilter(st); setSelectedIds(new Set()); }} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${statusFilter === st ? 'bg-white shadow text-primary-700' : 'text-gray-500 hover:text-gray-700'}`}>{st === 'all' ? 'الكل' : st}</button>
+                                    <button key={st} onClick={() => { setStatusFilter(st); setSelectedIds(new Set()); }} className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all whitespace-nowrap ${statusFilter === st ? 'bg-white shadow text-primary-700' : 'text-gray-500 hover:text-gray-700'}`}>{statusLabels[st]}</button>
                                 ))}
                             </div>
                         </div>
@@ -255,7 +303,7 @@ export const ProviderReservations = () => {
                                                     </div>
                                                     <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-600">
                                                         <span className="flex items-center gap-1"><ClockIcon className="w-4 h-4 text-gray-400" /> {new Date(res.createdAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
-                                                        <span className="flex items-center gap-1 font-bold text-primary-700"><CurrencyDollarIcon className="w-4 h-4" /> {res.totalPrice} ر.ي</span>
+                                                        <span className="flex items-center gap-1 font-bold text-primary-700"><CurrencyDollarIcon className="w-4 h-4" /> {res.totalPrice} {(res as any).currency || 'YER'}</span>
                                                     </div>
                                                     {res.paymentReference && <div className="mt-2 bg-green-50 text-green-800 text-xs px-2 py-1 rounded inline-flex items-center gap-1"><BanknotesIcon className="w-3 h-3" /> مرجع الدفع: {res.paymentReference}</div>}
                                                 </div>
@@ -284,8 +332,10 @@ export const ProviderReservations = () => {
                                                             <p className="text-xs text-gray-500">{group.items.length} حجوزات</p>
                                                         </div>
                                                     </div>
-                                                    <div className="text-right">
-                                                        <div className="text-lg font-bold text-primary-700">{group.total} ر.ي</div>
+                                                    <div className="text-right flex flex-col items-end">
+                                                         {Object.entries(group.totals).map(([curr, val]) => (
+                                                            <div key={curr} className="text-lg font-bold text-primary-700">{val} <span className="text-xs">{curr}</span></div>
+                                                         ))}
                                                     </div>
                                                 </div>
                                                 <div className="divide-y divide-gray-100">
@@ -299,6 +349,7 @@ export const ProviderReservations = () => {
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-3">
+                                                                <span className="text-xs font-bold text-gray-500">{res.totalPrice} {(res as any).currency || 'YER'}</span>
                                                                 <Badge status={res.status} />
                                                             </div>
                                                         </div>
@@ -365,6 +416,7 @@ export const ProviderOffers = () => {
     const stats = useMemo(() => {
         const totalActive = offers.filter(o => o.isActive && o.quantityRemaining > 0).length;
         const totalSold = offers.reduce((acc, o) => acc + (o.quantityTotal - o.quantityRemaining), 0);
+        // Revenue projection (approximate as it doesn't split by currency for this summary)
         const totalRevenue = offers.reduce((acc, o) => acc + ((o.quantityTotal - o.quantityRemaining) * o.price), 0);
         return { totalActive, totalSold, totalRevenue };
     }, [offers]);
@@ -410,14 +462,20 @@ export const ProviderOffers = () => {
     const handleSaveOffer = async () => {
         if(!userProfile || !selectedItemForOffer) return;
         try {
+            // Save currency in offering to be used later in reservations
             const payload = {
-                itemId: selectedItemForOffer.id, providerId: userProfile.uid, itemName: selectedItemForOffer.name, 
-                itemImageUrl: selectedItemForOffer.imageUrl, price: Number(newOfferData.price), 
+                itemId: selectedItemForOffer.id, 
+                providerId: userProfile.uid, 
+                itemName: selectedItemForOffer.name, 
+                itemImageUrl: selectedItemForOffer.imageUrl, 
+                price: Number(newOfferData.price), 
+                currency: selectedItemForOffer.currency || 'YER', // Save currency
                 quantityTotal: Number(newOfferData.quantity), 
                 quantityRemaining: editingOfferId 
                     ? Number(newOfferData.quantity) - (offers.find(o=>o.id===editingOfferId)?.quantityTotal! - offers.find(o=>o.id===editingOfferId)?.quantityRemaining!) 
                     : Number(newOfferData.quantity),
-                date: newOfferData.date, isActive: true 
+                date: newOfferData.date, 
+                isActive: true 
             };
 
             if (editingOfferId) {
@@ -466,7 +524,7 @@ export const ProviderOffers = () => {
                 <div className="flex flex-wrap gap-3 w-full lg:w-auto">
                     <StatBadge label="عروض نشطة" value={stats.totalActive} icon={<BoltIcon className="w-5 h-5"/>} color="bg-orange-500" trend="+ نشط حالياً" />
                     <StatBadge label="مبيعات العروض" value={stats.totalSold} icon={<FireIcon className="w-5 h-5"/>} color="bg-red-500" trend="إجمالي المباع" />
-                    <StatBadge label="الإيرادات المتوقعة" value={`${stats.totalRevenue.toLocaleString()}`} icon={<BanknotesIcon className="w-5 h-5"/>} color="bg-green-600" trend="من العروض الحالية" />
+                    <StatBadge label="القيمة المتوقعة" value={`${stats.totalRevenue.toLocaleString()}`} icon={<BanknotesIcon className="w-5 h-5"/>} color="bg-green-600" trend="تقريبية" />
                 </div>
             </div>
 
@@ -516,7 +574,7 @@ export const ProviderOffers = () => {
                                         <h3 className="font-bold text-lg leading-tight shadow-black drop-shadow-md mb-1">{offer.itemName}</h3>
                                         <div className="flex items-center gap-3 text-xs opacity-90 font-medium">
                                             <span className="flex items-center gap-1 bg-black/20 px-2 py-1 rounded-lg backdrop-blur-sm"><CalendarIcon className="w-3 h-3"/> {offer.date}</span>
-                                            <span className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded-lg backdrop-blur-sm text-white"><CurrencyDollarIcon className="w-3 h-3"/> {offer.price} ر.ي</span>
+                                            <span className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded-lg backdrop-blur-sm text-white"><CurrencyDollarIcon className="w-3 h-3"/> {offer.price} {(offer as any).currency || 'YER'}</span>
                                         </div>
                                     </div>
                                     <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-2">
@@ -554,7 +612,7 @@ export const ProviderOffers = () => {
                             {filteredItemsForSelection.map(item => (
                                 <div key={item.id} onClick={() => { setSelectedItemForOffer(item); setNewOfferData({...newOfferData, price: item.priceDefault}); }} className="cursor-pointer border border-gray-200 rounded-xl p-3 hover:border-primary-500 hover:bg-primary-50 transition-all flex flex-col items-center text-center gap-2 group">
                                     <img src={item.imageUrl} className="w-16 h-16 rounded-lg object-cover bg-gray-200" alt="" />
-                                    <div><p className="font-bold text-sm text-gray-800 line-clamp-1">{item.name}</p><p className="text-xs text-primary-600 font-medium">{item.priceDefault} ر.ي</p></div>
+                                    <div><p className="font-bold text-sm text-gray-800 line-clamp-1">{item.name}</p><p className="text-xs text-primary-600 font-medium">{item.priceDefault} {item.currency}</p></div>
                                 </div>
                             ))}
                         </div>
@@ -566,7 +624,7 @@ export const ProviderOffers = () => {
                             <div><h4 className="font-bold text-gray-800">{selectedItemForOffer.name}</h4><button onClick={() => setSelectedItemForOffer(null)} className="text-xs text-primary-600 font-medium hover:underline">تغيير الصنف</button></div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div><label className="block text-xs font-bold text-gray-500 mb-1">سعر العرض</label><input type="number" className="w-full px-4 py-3 border rounded-xl font-bold text-gray-800 focus:ring-2 focus:ring-primary-500 outline-none" value={newOfferData.price || ''} onChange={e => setNewOfferData({...newOfferData, price: Number(e.target.value)})} /></div>
+                            <div><label className="block text-xs font-bold text-gray-500 mb-1">سعر العرض ({selectedItemForOffer.currency})</label><input type="number" className="w-full px-4 py-3 border rounded-xl font-bold text-gray-800 focus:ring-2 focus:ring-primary-500 outline-none" value={newOfferData.price || ''} onChange={e => setNewOfferData({...newOfferData, price: Number(e.target.value)})} /></div>
                             <div><label className="block text-xs font-bold text-gray-500 mb-1">الكمية الكلية</label><input type="number" className="w-full px-4 py-3 border rounded-xl font-bold text-gray-800 focus:ring-2 focus:ring-primary-500 outline-none" value={newOfferData.quantity} onChange={e => setNewOfferData({...newOfferData, quantity: Number(e.target.value)})} /></div>
                         </div>
                         <div><label className="block text-xs font-bold text-gray-500 mb-1">تاريخ العرض / الموعد</label><input type="date" className="w-full px-4 py-3 border rounded-xl text-gray-800 focus:ring-2 focus:ring-primary-500 outline-none" value={newOfferData.date} onChange={e => setNewOfferData({...newOfferData, date: e.target.value})} /></div>
